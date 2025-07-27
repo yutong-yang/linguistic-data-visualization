@@ -1,0 +1,11 @@
+id,name,spk_code,spk_age,spk_age_c,spk_sex,rec_date,rec_date_c,genre,genre_stim,gloss,transl,sound_quality,background_noise,word_tokens,word_tokens_core,extended
+T001,mc_english_devon01,EN02,80,certain,m,1980,certain,personal narrative,na,all,English,medium,none,3730,0,yes
+T002,mc_english_kent01,EN01,85,approximate,m,1975,certain,personal narrative,na,all,English,medium,none,3988,0,yes
+T003,mc_english_kent02_a,EN01,85,approximate,m,1975,certain,personal narrative,na,all,English,medium,punctual,4773,0,yes
+T004,mc_english_kent02_b_part1,EN01,85,approximate,m,1975,certain,personal narrative,na,all,English,medium,punctual,2381,2381,no
+T005,mc_english_kent02_b_part2,EN01,85,approximate,m,1975,certain,personal narrative,na,all,English,medium,punctual,2350,2350,no
+T006,mc_english_kent03_a,EN03,87,approximate,m,1976,certain,personal narrative,na,all,English,medium,none,4183,0,yes
+T007,mc_english_kent03_b_part1,EN03,87,approximate,m,1976,certain,personal narrative,na,all,English,medium,punctual,2106,2106,no
+T008,mc_english_kent03_b_part2,EN03,87,approximate,m,1976,certain,personal narrative,na,all,English,medium,punctual,2077,2077,no
+T009,mc_english_london01_a,EN04,61,approximate,m,1985,certain,personal narrative,na,all,English,bad,none,4723,0,yes
+T010,mc_english_london01_b,EN04,61,approximate,m,1985,certain,personal narrative,na,all,English,bad,none,4903,0,yes

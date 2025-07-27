@@ -1,0 +1,12 @@
+The English (Southern England) DoReCo dataset was compiled by Nils Norman Schiborr based on recordings created between 1975 and 1985 and further processed for DoReCo by Ludger Paschen and Matthew Stave between 2019 and 2022. The files that the English (Southern England) DoReCo dataset are based on are from Nils Norman Schiborr's English (Southern England) Multi-CAST dataset (https://multicast.aspra.uni-bamberg.de/#english) and they additionally annotated with the GRAID (Grammatical Relations and Animacy in Discourse) and RefIND (Referent Indexing in Natural Language Discourse) annotation schemes (see https://multicast.aspra.uni-bamberg.de).
+
+English (Southern England) DoReCo annotation files are distributed under an Attribution 4.0 International (CC BY 4.0) License (https://creativecommons.org/licenses/by/4.0/).
+
+English (Southern England) DoReCo audio files are distributed under an Attribution 4.0 International (CC BY 4.0) License (https://creativecommons.org/licenses/by/4.0/).
+
+The English (Southern England) DoReCo dataset should be cited as follows:
+Schiborr, Nils Norman. 2024. English (Southern England) DoReCo dataset. In Seifart, Frank, Ludger Paschen and Matthew Stave (eds.). Language Documentation Reference Corpus (DoReCo) 2.0. Lyon: Laboratoire Dynamique Du Langage (UMR5596, CNRS & Université Lyon 2). (https://doi.org/10.34847/nkl.9c271u5g).
+
+Please note that when actual data from any number of DoReCo datasets is used, the full reference for each individual dataset must be provided, including the name(s) of the creator(s) of each dataset. It is NOT sufficient to refer to DoReCo as a whole. We are aware that this may result in very long lists of references, but it is only in this way that corpus creators get due recognition for their work. The default is to include the full set of bibliographical references in the reference section of the main text of a paper or abstract. If this is absolutely impossible (because of page limit restrictions, for instance), then inclusion of the full list of references in an appendix is acceptable, or - as a last resort - in supplementary material published separately, e.g. on Zenodo or OSF, in which case the main text of the paper or the abstract must explicitly refer to this list and provide its URL or PID.
+
+A web interface for easy access to this dataset as well as other DoReCo datasets and further information can be found at https://doreco.huma-num.fr.

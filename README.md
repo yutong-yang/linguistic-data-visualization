@@ -36,7 +36,7 @@ Visualizing and analyzing linguistic data from multiple databases.
 
 ### Prerequisites
 - Node.js 18+ 
-- Python 3.8+
+- Python 3.12+
 - npm or yarn
 
 ### Frontend Setup
@@ -56,10 +56,10 @@ npm run build
 cd backend
 
 # Install Python dependencies
-pip install -r requirements.txt
+uv sync
 
 # Start the API server
-python simple_api.py
+uv run simple_api.py
 ```
 
 ## Project Structure

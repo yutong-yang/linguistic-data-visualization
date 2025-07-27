@@ -1,12 +1,119 @@
-# React + Vite
+# Linguistic Data Visualization Project
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A comprehensive web application for visualizing and analyzing linguistic data from multiple databases including WALS (World Atlas of Language Structures), D-PLACE, Grambank, and ASJP.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Interactive Map Visualization**: Explore linguistic features across different languages and regions
+- **Correlation Analysis**: Analyze relationships between linguistic features and social factors
+- **Phylogenetic Tree Visualization**: View language family trees and evolutionary relationships
+- **Knowledge Base Integration**: AI-powered linguistic knowledge base with document processing
+- **Multi-language Support**: English and Chinese interface
+- **Real-time Chat Interface**: Interactive chat widget for linguistic queries
 
-## Expanding the ESLint configuration
+## Technology Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Frontend
+- **React 18** with Vite for fast development
+- **D3.js** for data visualization
+- **Leaflet** for interactive maps
+- **Chart.js** for statistical charts
+- **Tailwind CSS** for styling
+
+### Backend
+- **Python Flask** API server
+- **FAISS** for vector similarity search
+- **Sentence Transformers** for text embeddings
+- **SQLite** for local data storage
+
+### Data Sources
+- WALS (World Atlas of Language Structures)
+- D-PLACE (Database of Places, Language, Culture and Environment)
+- Grambank
+- ASJP (Automated Similarity Judgment Program)
+
+## Installation
+
+### Prerequisites
+- Node.js 18+ 
+- Python 3.8+
+- npm or yarn
+
+### Frontend Setup
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+### Backend Setup
+```bash
+cd backend
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Start the API server
+python api.py
+```
+
+## Project Structure
+
+```
+linguistic-react/
+├── src/
+│   ├── components/          # React components
+│   ├── context/            # React context providers
+│   ├── utils/              # Utility functions
+│   └── langs/              # Internationalization files
+├── backend/
+│   ├── api.py              # Main Flask API
+│   ├── knowledge_base.py   # Knowledge base implementation
+│   └── requirements.txt    # Python dependencies
+├── public/
+│   ├── cldf-datasets-wals-014143f/  # WALS dataset
+│   ├── dplace-cldf/                 # D-PLACE dataset
+│   ├── grambank-grambank-7ae000c/   # Grambank dataset
+│   └── lexibank-asjp-f0f1d0d/       # ASJP dataset
+└── README.md
+```
+
+## Usage
+
+1. **Start the backend server** (runs on http://localhost:5000)
+2. **Start the frontend development server** (runs on http://localhost:5173)
+3. **Open your browser** and navigate to the frontend URL
+4. **Upload documents** to the knowledge base for AI-powered analysis
+5. **Explore linguistic data** through interactive visualizations
+
+## Key Components
+
+- **MapView**: Interactive world map showing language distributions
+- **CorrelationAnalysis**: Statistical analysis of linguistic features
+- **PhyloTree**: Phylogenetic tree visualization
+- **ChatWidget**: AI-powered chat interface
+- **KnowledgeBaseManager**: Document upload and management
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- WALS (World Atlas of Language Structures) for linguistic data
+- D-PLACE for cultural and environmental data
+- Grambank for grammatical features
+- ASJP for lexical similarity data

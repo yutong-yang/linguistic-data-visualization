@@ -1,6 +1,6 @@
 # Linguistic Data Visualization Project
 
-A comprehensive web application for visualizing and analyzing linguistic data from multiple databases including WALS (World Atlas of Language Structures), D-PLACE, Grambank, and ASJP.
+Visualizing and analyzing linguistic data from multiple databases.
 
 ## Features
 
@@ -59,7 +59,7 @@ cd backend
 pip install -r requirements.txt
 
 # Start the API server
-python api.py
+python simple_api.py
 ```
 
 ## Project Structure
@@ -98,18 +98,6 @@ linguistic-react/
 - **PhyloTree**: Phylogenetic tree visualization
 - **ChatWidget**: AI-powered chat interface
 - **KnowledgeBaseManager**: Document upload and management
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Acknowledgments
 

@@ -29,6 +29,7 @@ export async function loadGrambankParameters() {
     
     cachedParameters = parameters;
     console.log(`Loaded ${parameters.length} Grambank parameters`);
+    console.log(parameters);
     return parameters;
   } catch (error) {
     console.error('Failed to load Grambank parameters:', error);
@@ -58,6 +59,7 @@ export async function loadDplaceVariables() {
     
     cachedVariables = variables;
     console.log(`Loaded ${variables.length} D-PLACE variables`);
+    console.log(variables);
     return variables;
   } catch (error) {
     console.error('Failed to load D-PLACE variables:', error);

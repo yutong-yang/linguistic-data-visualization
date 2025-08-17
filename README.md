@@ -1,45 +1,24 @@
-# Linguistic Data Visualization Project
-
-Visualizing and analyzing linguistic data from multiple databases.
-
-## Features
-
-- **Interactive Map Visualization**: Explore linguistic features across different languages and regions
-- **Correlation Analysis**: Analyze relationships between linguistic features and social factors
-- **Phylogenetic Tree Visualization**: View language family trees and evolutionary relationships
-- **Knowledge Base Integration**: AI-powered linguistic knowledge base with document processing
-- **Multi-language Support**: English and Chinese interface
-- **Real-time Chat Interface**: Interactive chat widget for linguistic queries
-
-## Technology Stack
-
 ### Frontend
-- **React 18** with Vite for fast development
-- **D3.js** for data visualization
-- **Leaflet** for interactive maps
-- **Chart.js** for statistical charts
-- **Tailwind CSS** for styling
+- React 18 + Vite
+- D3.js, Leaflet, Chart.js
+- Tailwind CSS
 
 ### Backend
-- **Python Flask** API server
-- **FAISS** for vector similarity search
-- **Sentence Transformers** for text embeddings
-- **SQLite** for local data storage
+- Python FastAPI
+- Lightweight TF-IDF
+- Environment variable configuration
 
 ### Data Sources
-- WALS (World Atlas of Language Structures)
 - D-PLACE (Database of Places, Language, Culture and Environment)
 - Grambank
-- ASJP (Automated Similarity Judgment Program)
 
 ## Installation
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 18+
 - Python 3.12+
-- npm or yarn
 
-### Frontend Setup
+### Frontend
 ```bash
 # Install dependencies
 npm install
@@ -51,15 +30,21 @@ npm run dev
 npm run build
 ```
 
-### Backend Setup
+### Backend
 ```bash
 cd backend
 
 # Install Python dependencies
 uv sync
 
-# Start the API server
-uv run simple_api.py
+# Start the API server (default port 8000)
+./start-uv.sh
+
+# Or with custom configuration
+PORT=8888 ./start-uv.sh
+
+# Or use original command
+uv run uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Project Structure
@@ -69,12 +54,15 @@ linguistic-react/
 ├── src/
 │   ├── components/          # React components
 │   ├── context/            # React context providers
+│   ├── config/             # API configuration
 │   ├── utils/              # Utility functions
 │   └── langs/              # Internationalization files
 ├── backend/
-│   ├── api.py              # Main Flask API
+│   ├── api.py              # Main FastAPI server
+│   ├── start-uv.sh         # UV startup script
+│   ├── start.py            # Python startup script
 │   ├── knowledge_base.py   # Knowledge base implementation
-│   └── requirements.txt    # Python dependencies
+│   └── pyproject.toml      # Python dependencies
 ├── public/
 │   ├── cldf-datasets-wals-014143f/  # WALS dataset
 │   ├── dplace-cldf/                 # D-PLACE dataset
@@ -85,23 +73,11 @@ linguistic-react/
 
 ## Usage
 
-1. **Start the backend server** (runs on http://localhost:5000)
-2. **Start the frontend development server** (runs on http://localhost:5173)
-3. **Open your browser** and navigate to the frontend URL
-4. **Upload documents** to the knowledge base for AI-powered analysis
-5. **Explore linguistic data** through interactive visualizations
+1. Start backend (port 8000)
+2. Start frontend (port 5173)
+3. Open browser
 
-## Key Components
+## Configuration
 
-- **MapView**: Interactive world map showing language distributions
-- **CorrelationAnalysis**: Statistical analysis of linguistic features
-- **PhyloTree**: Phylogenetic tree visualization
-- **ChatWidget**: AI-powered chat interface
-- **KnowledgeBaseManager**: Document upload and management
-
-## Acknowledgments
-
-- WALS (World Atlas of Language Structures) for linguistic data
-- D-PLACE for cultural and environmental data
-- Grambank for grammatical features
-- ASJP for lexical similarity data
+- Backend: `PORT`, `HOST`, `ALLOWED_ORIGINS`
+- Frontend: `VITE_API_BASE_URL`

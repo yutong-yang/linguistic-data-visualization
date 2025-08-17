@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { DataContext } from '../context/DataContext';
 import { featureGroups, gbFeatures, gbOrangeFeatures } from '../utils/featureData';
-import RecommendedFeaturesDisplay from './RecommendedFeaturesDisplay';
 
 const FeatureSelector = () => {
   const {
@@ -94,6 +93,21 @@ const FeatureSelector = () => {
     }
   };
 
+  // AI解释特征功能
+  const explainFeatureWithAI = (featureId) => {
+    if (window.explainFeature) {
+      const featureInfo = featureDescriptions[featureId];
+      const feature = {
+        id: featureId,
+        name: featureInfo?.name || featureId,
+        description: featureInfo?.description || '无描述',
+        database: featureId.startsWith('GB') ? 'Grambank' : 'D-PLACE',
+        type: 'linguistic_feature'
+      };
+      window.explainFeature(feature);
+    }
+  };
+
   // 全选/全不选 GB 特征
   const handleGBSelectAll = (type, selectAll) => {
     const features = type === 'gender' ? gbFeatures : gbOrangeFeatures;
@@ -180,11 +194,31 @@ const FeatureSelector = () => {
                 htmlFor={`gb_${feature}`}
                 style={{ cursor: 'help', fontSize: '11px', marginRight: '5px' }}
                 data-feature={feature}
-                title={featureDescriptions[feature]?.description || feature}
+                title={`${featureDescriptions[feature]?.description || feature}\n\n点击查看详情`}
                 onClick={(e) => handleFeatureClick(e, feature)}
               >
                 {feature}
               </label>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  explainFeatureWithAI(feature);
+                }}
+                style={{ 
+                  padding: '2px 6px', 
+                  background: '#007bff', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '3px', 
+                  cursor: 'pointer', 
+                  fontSize: '10px',
+                  marginLeft: '4px'
+                }}
+                title={langs[lang].aiExplanation || 'AI解释'}
+              >
+                🤖
+              </button>
               <input
                 type="number"
                 className="weight-input"
@@ -242,11 +276,31 @@ const FeatureSelector = () => {
                 htmlFor={`ea_${feature}`}
                 style={{ cursor: 'help', fontSize: '11px', marginRight: '5px' }}
                 data-feature={feature}
-                title={featureDescriptions[feature]?.description || feature}
+                title={`${featureDescriptions[feature]?.description || feature}\n\n点击查看详情`}
                 onClick={(e) => handleFeatureClick(e, feature)}
               >
                 {feature}
               </label>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  explainFeatureWithAI(feature);
+                }}
+                style={{ 
+                  padding: '2px 6px', 
+                  background: '#007bff', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '3px', 
+                  cursor: 'pointer', 
+                  fontSize: '10px',
+                  marginLeft: '4px'
+                }}
+                title={langs[lang].aiExplanation || 'AI解释'}
+              >
+                🤖
+              </button>
               <input
                 type="number"
                 className="weight-input"
@@ -335,10 +389,94 @@ const FeatureSelector = () => {
             </div>
           </div>
         </div>
+
+        {/* 新选择的特征 */}
+        {(selectedGBFeatures.length > 0 || selectedEAFeatures.length > 0) && (
+          <div className="feature-group newly-selected-features" style={{ marginTop: 20, borderTop: '1px solid #eee', paddingTop: 20 }}>
+            <h4>🎯 {langs[lang].newlySelectedFeatures || 'Newly Selected Features'}</h4>
+            
+            {/* GB特征 */}
+            {selectedGBFeatures.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <h5>🔵 {langs[lang].grambankFeatures || 'Grambank Features'} ({selectedGBFeatures.length})</h5>
+                <div className="features-grid">
+                  {selectedGBFeatures.map(feature => (
+                    <div key={feature} className="feature-item">
+                      <div className="feature-info">
+                        <div className="feature-id">{feature}</div>
+                        <div className="feature-name">
+                          {featureDescriptions[feature]?.name || feature}
+                        </div>
+                      </div>
+                      <div className="feature-actions">
+                        <button
+                          onClick={() => explainFeatureWithAI(feature)}
+                          className="ai-explain-btn"
+                          title={langs[lang].aiExplanation || 'AI解释'}
+                        >
+                          🤖
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newSelected = selectedGBFeatures.filter(f => f !== feature);
+                            setSelectedGBFeatures(newSelected);
+                            setGbWeights(prev => ({ ...prev, [feature]: '' }));
+                          }}
+                          className="remove-feature-btn"
+                          title={langs[lang].removeFeature || '移除特征'}
+                        >
+                          ❌
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* EA特征 */}
+            {selectedEAFeatures.length > 0 && (
+              <div>
+                <h5>🟠 {langs[lang].dplaceFeatures || 'D-PLACE Features'} ({selectedEAFeatures.length})</h5>
+                <div className="features-grid">
+                  {selectedEAFeatures.map(feature => (
+                    <div key={feature} className="feature-item">
+                      <div className="feature-info">
+                        <div className="feature-id">{feature}</div>
+                        <div className="feature-name">
+                          {featureDescriptions[feature]?.name || feature}
+                        </div>
+                      </div>
+                      <div className="feature-actions">
+                        <button
+                          onClick={() => explainFeatureWithAI(feature)}
+                          className="ai-explain-btn"
+                          title={langs[lang].aiExplanation || 'AI解释'}
+                        >
+                          🤖
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newSelected = selectedEAFeatures.filter(f => f !== feature);
+                            setSelectedEAFeatures(newSelected);
+                            setEaWeights(prev => ({ ...prev, [feature]: '' }));
+                          }}
+                          className="remove-feature-btn"
+                          title={langs[lang].removeFeature || '移除特征'}
+                        >
+                          ❌
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
-      {/* 推荐特征显示 */}
-      <RecommendedFeaturesDisplay />
+
     </div>
   );
 };

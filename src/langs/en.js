@@ -54,11 +54,9 @@ const en = {
   close: "Close",
   noDescription: "No description available for this feature.",
   featureType: "Feature Type",
-  // Linguistic Knowledge Base and Analysis Methods
+  // Linguistic Knowledge Base
   knowledgeBaseTitle: "📚 Linguistic Knowledge Base",
-  methodSuggestionTitle: "📊 Linguistic Analysis Methods",
   knowledgeBaseDesc: "Click on any concept to get AI explanation and connections to your data:",
-  methodSuggestionDesc: "Click on any method to get AI explanation and implementation suggestions:",
   // Knowledge Base Categories
   all: "All",
   typology: "Typology",
@@ -84,6 +82,7 @@ const en = {
   relevance: "Relevance",
   useCase: "Use Case",
   category: "Category",
-  complexity: "Complexity"
+  complexity: "Complexity",
+  aiExplanation: "AI Explanation"
 };
 export default en; 

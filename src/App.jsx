@@ -7,7 +7,7 @@ import ChatWidget from './components/ChatWidget';
 import FeatureInfoModal from './components/FeatureInfoModal';
 import ApiKeyModal from './components/ApiKeyModal';
 import MapView from './components/MapView';
-import MethodSuggestion from './components/MethodSuggestion';
+
 import LinguisticKnowledgeBase from './components/LinguisticKnowledgeBase';
 import KnowledgeBaseManager from './components/KnowledgeBaseManager';
 import FeatureRecommendation from './components/FeatureRecommendation';
@@ -53,7 +53,7 @@ function AppInner() {
         <KnowledgeBaseManager />
         <FeatureRecommendation />
         <LinguisticKnowledgeBase />
-        <MethodSuggestion />
+
         <PhyloTree />
       </div>
       

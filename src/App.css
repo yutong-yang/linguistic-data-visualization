@@ -1,1 +1,432 @@
 /* 移除默认的React样式，使用assets/style.css中的样式 */
+
+/* 语言学知识库样式 */
+.knowledge-base {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.knowledge-base h3 {
+  color: #2c7c6c;
+  margin-bottom: 15px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.knowledge-base .description {
+  color: #666;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #2c7c6c;
+}
+
+.category-filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.category-btn {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  background: white;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+}
+
+.category-btn.active {
+  background: #2c7c6c;
+  color: white;
+  border-color: #2c7c6c;
+}
+
+.category-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.concepts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 15px;
+}
+
+.concept-card {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 4px solid #ddd;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.concept-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.concept-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.concept-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+}
+
+.concept-source {
+  padding: 2px 8px;
+  font-size: 10px;
+  border-radius: 12px;
+  background: #e9ecef;
+  color: #495057;
+}
+
+.concept-description {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.concept-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.concept-category {
+  padding: 2px 8px;
+  font-size: 10px;
+  border-radius: 12px;
+  background: #2c7c6c;
+  color: white;
+}
+
+.concept-count {
+  font-size: 10px;
+  color: #666;
+}
+
+.concept-examples,
+.concept-theories,
+.concept-relevance {
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.concept-examples strong,
+.concept-theories strong,
+.concept-relevance strong {
+  color: #333;
+}
+
+.concept-detail {
+  margin-top: 20px;
+  padding: 15px;
+  background: #e8f5e8;
+  border: 1px solid #4CAF50;
+  border-radius: 8px;
+}
+
+.concept-detail h4 {
+  margin: 0 0 10px 0;
+  color: #2e7d32;
+}
+
+.concept-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.concept-actions button {
+  padding: 6px 12px;
+  border: 1px solid #4CAF50;
+  border-radius: 4px;
+  background: white;
+  color: #4CAF50;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.concept-actions button:hover {
+  background: #4CAF50;
+  color: white;
+}
+
+/* 语言学分析方法样式 */
+.method-suggestion {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.method-suggestion h3 {
+  color: #2c7c6c;
+  margin-bottom: 15px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.method-suggestion .description {
+  color: #666;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.data-status {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.status-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.status-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #2c7c6c;
+}
+
+.methods-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 15px;
+}
+
+.method-card {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 4px solid #ddd;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.method-card:hover:not(.disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.method-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.method-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.method-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+}
+
+.method-category {
+  padding: 2px 8px;
+  font-size: 10px;
+  border-radius: 12px;
+  background: #2c7c6c;
+  color: white;
+}
+
+.method-description {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.method-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+
+.method-complexity {
+  color: #666;
+}
+
+.method-requirements {
+  color: #666;
+}
+
+.method-use-case {
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.method-use-case strong {
+  color: #333;
+}
+
+.method-unavailable {
+  font-size: 11px;
+  color: #dc3545;
+  font-style: italic;
+  text-align: center;
+  padding: 5px;
+  background: #f8d7da;
+  border-radius: 4px;
+}
+
+.analysis-loading {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.analysis-results {
+  margin-top: 20px;
+  padding: 20px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.analysis-results h4 {
+  margin: 0 0 15px 0;
+  color: #2c7c6c;
+}
+
+.analysis-error {
+  color: #dc3545;
+  background: #f8d7da;
+  padding: 15px;
+  border-radius: 4px;
+}
+
+.analysis-content {
+  margin-bottom: 20px;
+}
+
+.analysis-summary {
+  margin-bottom: 20px;
+}
+
+.analysis-summary h5 {
+  margin: 0 0 10px 0;
+  color: #333;
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.summary-stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.stat-label {
+  font-weight: bold;
+  color: #333;
+}
+
+.stat-value {
+  color: #2c7c6c;
+}
+
+.analysis-data h5 {
+  margin: 0 0 10px 0;
+  color: #333;
+}
+
+.data-display {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.4;
+  border: 1px solid #e9ecef;
+}
+
+.close-results {
+  padding: 8px 16px;
+  border: 1px solid #6c757d;
+  border-radius: 4px;
+  background: white;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.close-results:hover {
+  background: #6c757d;
+  color: white;
+}

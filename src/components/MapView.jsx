@@ -84,6 +84,22 @@ const MapView = () => {
                 const fid = el.getAttribute('data-feature');
                 if (fid) showFeatureInfo(fid);
               };
+              el.ondblclick = (evt) => {
+                evt.preventDefault();
+                const fid = el.getAttribute('data-feature');
+                if (fid && window.explainFeature) {
+                  const featureInfo = featureDescriptions[fid];
+                  const feature = {
+                    id: fid,
+                    name: featureInfo?.name || fid,
+                    description: featureInfo?.description || `Feature ${fid} from map view`,
+                    database: fid.startsWith('GB') ? 'Grambank' : 'D-PLACE',
+                    type: 'map_feature'
+                  };
+                  window.explainFeature(feature);
+                }
+              };
+              el.title = `${el.title || fid}\n\n点击查看详情，双击获取AI解释`;
             });
           }
         }, 100);
@@ -151,6 +167,22 @@ const MapView = () => {
               const fid = el.getAttribute('data-feature');
               if (fid) showFeatureInfo(fid);
             };
+            el.ondblclick = (evt) => {
+              evt.preventDefault();
+              const fid = el.getAttribute('data-feature');
+              if (fid && window.explainFeature) {
+                const featureInfo = featureDescriptions[fid];
+                const feature = {
+                  id: fid,
+                  name: featureInfo?.name || fid,
+                  description: featureInfo?.description || `Feature ${fid} from map view`,
+                  database: fid.startsWith('GB') ? 'Grambank' : 'D-PLACE',
+                  type: 'map_feature'
+                };
+                window.explainFeature(feature);
+              }
+            };
+            el.title = `${el.title || fid}\n\n点击查看详情，双击获取AI解释`;
           });
         }
       }, 100);

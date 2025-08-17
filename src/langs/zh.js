@@ -54,11 +54,9 @@ const zh = {
   close: "关闭",
   noDescription: "此特征暂无描述。",
   featureType: "特征类型",
-  // 语言学知识库和分析方法
+  // 语言学知识库
   knowledgeBaseTitle: "📚 语言学知识库",
-  methodSuggestionTitle: "📊 语言学分析方法",
   knowledgeBaseDesc: "点击任何概念获取AI解释和与当前数据的关联：",
-  methodSuggestionDesc: "点击任何方法获取AI解释和实施建议：",
   // 知识库分类
   all: "全部",
   typology: "类型学",
@@ -84,6 +82,7 @@ const zh = {
   relevance: "相关性",
   useCase: "用途",
   category: "分类",
-  complexity: "复杂度"
+  complexity: "复杂度",
+  aiExplanation: "AI解释"
 };
 export default zh; 

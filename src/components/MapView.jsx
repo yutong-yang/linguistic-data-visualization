@@ -7,7 +7,7 @@ import { gbFeatures, gbOrangeFeatures } from '../utils/featureData';
 const MapView = () => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const { languageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages } = useContext(DataContext);
+  const { languageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages, featureDescriptions } = useContext(DataContext);
   const markersRef = useRef([]);
   const currentZoomRef = useRef(2);
 
@@ -80,13 +80,13 @@ const MapView = () => {
           const popup = e.popup.getElement();
           if (popup) {
             popup.querySelectorAll('[data-feature]').forEach(el => {
+              const fid = el.getAttribute('data-feature');
+              
               el.onclick = (evt) => {
-                const fid = el.getAttribute('data-feature');
                 if (fid) showFeatureInfo(fid);
               };
               el.ondblclick = (evt) => {
                 evt.preventDefault();
-                const fid = el.getAttribute('data-feature');
                 if (fid && window.explainFeature) {
                   const featureInfo = featureDescriptions[fid];
                   const feature = {
@@ -163,13 +163,13 @@ const MapView = () => {
         const popup = e.popup.getElement();
         if (popup) {
           popup.querySelectorAll('[data-feature]').forEach(el => {
+            const fid = el.getAttribute('data-feature');
+            
             el.onclick = (evt) => {
-              const fid = el.getAttribute('data-feature');
               if (fid) showFeatureInfo(fid);
             };
             el.ondblclick = (evt) => {
               evt.preventDefault();
-              const fid = el.getAttribute('data-feature');
               if (fid && window.explainFeature) {
                 const featureInfo = featureDescriptions[fid];
                 const feature = {
@@ -307,21 +307,57 @@ const MapView = () => {
     const allGB = selectedGBFeatures.length > 0 ? selectedGBFeatures : [...gbFeatures, ...gbOrangeFeatures];
     const allEA = selectedEAFeatures;
 
+    let totalLanguages = 0;
+    let filteredLanguages = 0;
+    let displayedLanguages = 0;
+
     languageData.forEach(lang => {
       if (!lang.Latitude || !lang.Longitude) return;
 
+      totalLanguages++;
+
       try {
+        // 检查EA特征：如果任何选中的EA特征是NA，则跳过这个语言点
+        if (allEA.length > 0) {
+          const allEaFeaturesValid = allEA.every(feature => {
+            const value = lang[feature];
+            return value !== 'NA' && value !== null && value !== undefined && value !== '';
+          });
+          
+          // 如果任何EA特征是NA，跳过这个语言点
+          if (!allEaFeaturesValid) {
+            // 调试信息：显示被过滤掉的语言点
+            if (highlightedLanguages.includes(lang.Name)) {
+              console.log(`Filtered out ${lang.Name} - some EA features are NA:`, 
+                allEA.map(f => ({ feature: f, value: lang[f], isValid: lang[f] !== 'NA' && lang[f] !== null && lang[f] !== undefined && lang[f] !== '' }))
+              );
+            }
+            filteredLanguages++;
+            return; // 跳过，不显示圆圈
+          }
+        }
+
         // 计算大小值（EA特征加权平均）- 按照gender_analysis.html的方式
         let sizeValue = 0, totalWeight = 0;
         allEA.forEach(f => {
           const w = parseFloat(eaWeights[f] || 1);
           const v = lang[f];
-          if (v !== null && !isNaN(v)) {
+          if (v !== null && !isNaN(v) && v !== 'NA') {
             sizeValue += v * w;
             totalWeight += w;
           }
         });
         sizeValue = totalWeight > 0 ? sizeValue / totalWeight : 0;
+
+        // 调试信息：显示EA特征计算过程
+        if (allEA.length > 0 && highlightedLanguages.includes(lang.Name)) {
+          console.log(`EA Features calculation for ${lang.Name}:`, {
+            selectedEAFeatures: allEA,
+            eaWeights: eaWeights,
+            featureValues: allEA.map(f => ({ feature: f, value: lang[f], weight: eaWeights[f] || 1 })),
+            finalSizeValue: sizeValue
+          });
+        }
 
         // 构造饼图数据
         const featureData = allGB.map(feature => {
@@ -345,11 +381,18 @@ const MapView = () => {
         // 创建标记
         const marker = createMarker(lang, sizeValue, featureData, isHighlighted);
         markersRef.current.push(marker);
+        
+        displayedLanguages++;
 
       } catch (error) {
         console.warn('Error creating marker for language:', lang.Name, error);
       }
     });
+
+    // 显示过滤统计信息
+    if (allEA.length > 0) {
+      console.log(`EA Features filtering: ${totalLanguages} total languages, ${filteredLanguages} filtered out (some NA), ${displayedLanguages} displayed`);
+    }
   };
 
   // 渲染标记

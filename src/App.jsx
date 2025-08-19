@@ -1,12 +1,14 @@
 import React, { useState, useContext } from 'react';
 import './assets/style.css';
 import FeatureSelector from './components/FeatureSelector';
+import DynamicFeatureSelector from './components/DynamicFeatureSelector';
 import CorrelationAnalysis from './components/CorrelationAnalysis';
 import PhyloTree from './components/PhyloTree';
 import ChatWidget from './components/ChatWidget';
 import FeatureInfoModal from './components/FeatureInfoModal';
 import ApiKeyModal from './components/ApiKeyModal';
 import MapView from './components/MapView';
+import DataModeToggle from './components/DataModeToggle';
 
 import LinguisticKnowledgeBase from './components/LinguisticKnowledgeBase';
 import KnowledgeBaseManager from './components/KnowledgeBaseManager';
@@ -46,9 +48,13 @@ function AppInner() {
         中文/English
       </button>
       
+      {/* 数据模式切换组件 */}
+      <DataModeToggle />
+      
       {/* 左侧面板 */}
       <div className="left-panel">
         <FeatureSelector />
+        <DynamicFeatureSelector />
         <CorrelationAnalysis />
         <KnowledgeBaseManager />
         <FeatureRecommendation />

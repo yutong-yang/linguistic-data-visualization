@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import * as d3 from 'd3';
 import { DataContext } from '../context/DataContext';
 import { downloadCSV, downloadJSON, downloadTSV, downloadSummary, smartDownload } from '../utils/downloadUtils';
+import { getFamilyName, loadCombinedFamilyMapping } from '../utils/familyMapping';
 
 const DynamicFeatureSelector = () => {
   const { 
@@ -11,8 +12,12 @@ const DynamicFeatureSelector = () => {
     selectedEAFeatures, 
     setSelectedEAFeatures,
     reloadData,
-    loading
+    loading,
+    lang,
+    langs
   } = useContext(DataContext);
+  
+  const [familyMapping, setFamilyMapping] = useState({});
 
   const [availableGbFeatures, setAvailableGbFeatures] = useState([]);
   const [availableEaFeatures, setAvailableEaFeatures] = useState([]);
@@ -21,12 +26,27 @@ const DynamicFeatureSelector = () => {
   const [showGbSelector, setShowGbSelector] = useState(false);
   const [showEaSelector, setShowEaSelector] = useState(false);
 
-  // 加载可用特征列表
+  // 语言配置
+  const t = langs[lang];
+
+  // 加载可用特征列表和语系映射
   useEffect(() => {
     if (useDynamicData) {
       loadAvailableFeatures();
     }
-  }, [useDynamicData]);
+    
+    // 加载语系映射
+    const loadFamilyMapping = async () => {
+      try {
+        const mapping = await loadCombinedFamilyMapping();
+        setFamilyMapping(mapping);
+      } catch (error) {
+        console.error(t.loadFamilyMappingError || '加载语系映射失败:', error);
+      }
+    };
+    
+    loadFamilyMapping();
+  }, [useDynamicData, t.loadFamilyMappingError]);
 
   const loadAvailableFeatures = async () => {
     try {
@@ -107,7 +127,7 @@ const DynamicFeatureSelector = () => {
   // 下载数据功能
   const downloadData = () => {
     if (!selectedGBFeatures.length && !selectedEAFeatures.length) {
-      alert('请先选择至少一个特征');
+      alert(t.selectAtLeastOneFeature || '请先选择至少一个特征');
       return;
     }
 
@@ -116,7 +136,7 @@ const DynamicFeatureSelector = () => {
       const { languageData } = useContext(DataContext);
       
       if (!languageData || languageData.length === 0) {
-        alert('没有可下载的数据，请先应用特征选择');
+        alert(t.noDataToDownload || '没有可下载的数据，请先应用特征选择');
         return;
       }
 
@@ -128,6 +148,7 @@ const DynamicFeatureSelector = () => {
           Latitude: lang.Latitude,
           Longitude: lang.Longitude,
           Family_level_ID: lang.Family_level_ID,
+          Family_Name: getFamilyName(lang.Family_level_ID, familyMapping),
           Macroarea: lang.Macroarea,
           region: lang.region,
           Soc_ID: lang.Soc_ID
@@ -151,16 +172,16 @@ const DynamicFeatureSelector = () => {
       const filename = `dynamic_linguistic_data_${timestamp}`;
       smartDownload(downloadData, filename);
       
-    } catch (error) {
-      console.error('下载数据时出错:', error);
-      alert('下载数据时出错，请检查控制台');
-    }
+          } catch (error) {
+        console.error(t.downloadDataError || '下载数据时出错:', error);
+        alert(t.downloadDataError || '下载数据时出错，请检查控制台');
+      }
   };
 
   // 下载特定格式
   const downloadSpecificFormat = (format) => {
     if (!selectedGBFeatures.length && !selectedEAFeatures.length) {
-      alert('请先选择至少一个特征');
+      alert(t.selectAtLeastOneFeature || '请先选择至少一个特征');
       return;
     }
 
@@ -168,7 +189,7 @@ const DynamicFeatureSelector = () => {
       const { languageData } = useContext(DataContext);
       
       if (!languageData || languageData.length === 0) {
-        alert('没有可下载的数据，请先应用特征选择');
+        alert(t.noDataToDownload || '没有可下载的数据，请先应用特征选择');
         return;
       }
 
@@ -180,6 +201,7 @@ const DynamicFeatureSelector = () => {
           Latitude: lang.Latitude,
           Longitude: lang.Longitude,
           Family_level_ID: lang.Family_level_ID,
+          Family_Name: getFamilyName(lang.Family_level_ID, familyMapping),
           Macroarea: lang.Macroarea,
           region: lang.region,
           Soc_ID: lang.Soc_ID
@@ -218,8 +240,8 @@ const DynamicFeatureSelector = () => {
       }
       
     } catch (error) {
-      console.error(`下载${format}格式数据时出错:`, error);
-      alert(`下载${format}格式数据时出错，请检查控制台`);
+      console.error(t.downloadFormatError?.replace('{format}', format) || `下载${format}格式数据时出错:`, error);
+      alert(t.downloadFormatError?.replace('{format}', format) || `下载${format}格式数据时出错，请检查控制台`);
     }
   };
 
@@ -229,91 +251,99 @@ const DynamicFeatureSelector = () => {
 
   return (
     <div className="dynamic-feature-selector" style={{
-      backgroundColor: '#f8f9fa',
-      padding: '20px',
-      borderRadius: '8px',
-      marginBottom: '20px',
-      border: '1px solid #dee2e6'
+      backgroundColor: '#f9f9f9',
+      padding: '12px',
+      borderRadius: '4px',
+      marginTop: '20px',
+      marginBottom: '10px',
+      border: '1px solid #ddd',
+      fontSize: '11px'
     }}>
-      <h3 style={{ marginTop: 0, marginBottom: '15px', color: '#495057' }}>
-        动态特征选择器
-      </h3>
+      <h4 style={{ 
+        marginTop: 0, 
+        marginBottom: '10px', 
+        color: '#666',
+        fontSize: '13px',
+        fontWeight: 'normal'
+      }}>
+        {t.dynamicFeatureSelectorTitle}
+      </h4>
       
-      <div style={{ marginBottom: '15px' }}>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+      <div style={{ marginBottom: '10px' }}>
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={clearAllFeatures}
             style={{
-              padding: '6px 12px',
+              padding: '4px 8px',
               backgroundColor: '#dc3545',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '3px',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: '10px'
             }}
           >
-            清除所有特征
+            {t.clearAllFeatures}
           </button>
           
           <button
             onClick={selectAllGbFeatures}
             style={{
-              padding: '6px 12px',
-              backgroundColor: '#17a2b8',
+              padding: '4px 8px',
+              backgroundColor: '#2c7c6c',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '3px',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: '10px'
             }}
           >
-            选择所有GB特征
+            {t.selectAllGbFeatures}
           </button>
           
           <button
             onClick={selectAllEaFeatures}
             style={{
-              padding: '6px 12px',
-              backgroundColor: '#28a745',
+              padding: '4px 8px',
+              backgroundColor: '#2c7c6c',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '3px',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: '10px'
             }}
           >
-            选择所有EA特征
+            {t.selectAllEaFeatures}
           </button>
         </div>
         
-        <div style={{ fontSize: '12px', color: '#6c757d' }}>
-          已选择: {selectedGBFeatures.length} 个GB特征, {selectedEAFeatures.length} 个EA特征
+        <div style={{ fontSize: '10px', color: '#666' }}>
+          {t.selectedFeaturesCount}: {selectedGBFeatures.length} {t.gbFeatures}, {selectedEAFeatures.length} {t.eaFeatures}
         </div>
       </div>
 
       {/* Grambank特征选择器 */}
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '15px' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center',
-          marginBottom: '10px'
+          marginBottom: '8px'
         }}>
-          <h4 style={{ margin: 0, color: '#17a2b8' }}>Grambank特征 (GB)</h4>
+          <span style={{ color: '#666', fontSize: '11px', fontWeight: 'bold' }}>{t.gbFeatures}</span>
           <button
             onClick={() => setShowGbSelector(!showGbSelector)}
             style={{
-              padding: '4px 8px',
-              backgroundColor: '#17a2b8',
+              padding: '3px 6px',
+              backgroundColor: '#2c7c6c',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '3px',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: '9px'
             }}
           >
-            {showGbSelector ? '隐藏' : '显示'} 选择器
+            {showGbSelector ? t.hideSelector : t.showSelector}
           </button>
         </div>
         
@@ -321,38 +351,42 @@ const DynamicFeatureSelector = () => {
           <div>
             <input
               type="text"
-              placeholder="搜索GB特征..."
+              placeholder={t.searchGbPlaceholder}
               value={searchGb}
               onChange={(e) => setSearchGb(e.target.value)}
               style={{
                 width: '100%',
-                padding: '8px',
-                border: '1px solid #ced4da',
-                borderRadius: '4px',
-                marginBottom: '10px'
+                padding: '6px',
+                border: '1px solid #ddd',
+                borderRadius: '3px',
+                marginBottom: '8px',
+                fontSize: '10px'
               }}
             />
             
             <div style={{ 
-              maxHeight: '200px', 
+              maxHeight: '150px', 
               overflowY: 'auto',
-              border: '1px solid #dee2e6',
-              borderRadius: '4px',
-              padding: '10px'
+              border: '1px solid #ddd',
+              borderRadius: '3px',
+              padding: '6px',
+              backgroundColor: '#fff'
             }}>
               {filteredGbFeatures.map(feature => (
                 <label key={feature.id} style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
-                  marginBottom: '8px',
-                  cursor: 'pointer'
+                  marginBottom: '6px',
+                  cursor: 'pointer',
+                  fontSize: '10px'
                 }}>
                   <input
                     type="checkbox"
                     checked={selectedGBFeatures.includes(feature.id)}
                     onChange={() => toggleGbFeature(feature.id)}
+                    style={{ marginRight: '6px' }}
                   />
-                  <span style={{ marginLeft: '8px', fontSize: '12px' }}>
+                  <span>
                     <strong>{feature.id}</strong>: {feature.name}
                   </span>
                 </label>
@@ -363,27 +397,27 @@ const DynamicFeatureSelector = () => {
       </div>
 
       {/* D-PLACE特征选择器 */}
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '15px' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center',
-          marginBottom: '10px'
+          marginBottom: '8px'
         }}>
-          <h4 style={{ margin: 0, color: '#28a745' }}>D-PLACE特征 (EA)</h4>
+          <span style={{ color: '#666', fontSize: '11px', fontWeight: 'bold' }}>{t.eaFeatures}</span>
           <button
             onClick={() => setShowEaSelector(!showEaSelector)}
             style={{
-              padding: '4px 8px',
-              backgroundColor: '#28a745',
+              padding: '3px 6px',
+              backgroundColor: '#2c7c6c',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '3px',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: '9px'
             }}
           >
-            {showEaSelector ? '隐藏' : '显示'} 选择器
+            {showEaSelector ? t.hideSelector : t.showSelector}
           </button>
         </div>
         
@@ -391,38 +425,42 @@ const DynamicFeatureSelector = () => {
           <div>
             <input
               type="text"
-              placeholder="搜索EA特征..."
+              placeholder={t.searchEaPlaceholder}
               value={searchEa}
               onChange={(e) => setSearchEa(e.target.value)}
               style={{
                 width: '100%',
-                padding: '8px',
-                border: '1px solid #ced4da',
-                borderRadius: '4px',
-                marginBottom: '10px'
+                padding: '6px',
+                border: '1px solid #ddd',
+                borderRadius: '3px',
+                marginBottom: '8px',
+                fontSize: '10px'
               }}
             />
             
             <div style={{ 
-              maxHeight: '200px', 
+              maxHeight: '150px', 
               overflowY: 'auto',
-              border: '1px solid #dee2e6',
-              borderRadius: '4px',
-              padding: '10px'
+              border: '1px solid #ddd',
+              borderRadius: '3px',
+              padding: '6px',
+              backgroundColor: '#fff'
             }}>
               {filteredEaFeatures.map(feature => (
                 <label key={feature.id} style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
-                  marginBottom: '8px',
-                  cursor: 'pointer'
+                  marginBottom: '6px',
+                  cursor: 'pointer',
+                  fontSize: '10px'
                 }}>
                   <input
                     type="checkbox"
                     checked={selectedEAFeatures.includes(feature.id)}
                     onChange={() => toggleEaFeature(feature.id)}
+                    style={{ marginRight: '6px' }}
                   />
-                  <span style={{ marginLeft: '8px', fontSize: '12px' }}>
+                  <span>
                     <strong>{feature.id}</strong>: {feature.name}
                   </span>
                 </label>
@@ -438,17 +476,17 @@ const DynamicFeatureSelector = () => {
         disabled={loading}
         style={{
           width: '100%',
-          padding: '12px',
-          backgroundColor: loading ? '#6c757d' : '#007bff',
+          padding: '8px',
+          backgroundColor: loading ? '#ccc' : '#2c7c6c',
           color: 'white',
           border: 'none',
-          borderRadius: '4px',
+          borderRadius: '3px',
           cursor: loading ? 'not-allowed' : 'pointer',
-          fontSize: '14px',
-          fontWeight: 'bold'
+          fontSize: '11px',
+          fontWeight: 'normal'
         }}
       >
-        {loading ? '正在加载数据...' : '应用特征选择'}
+        {loading ? t.loadingData : t.applyFeatures}
       </button>
     </div>
   );

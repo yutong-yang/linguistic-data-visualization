@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { DataContext } from '../context/DataContext';
 import { gbFeatures, gbOrangeFeatures } from '../utils/featureData';
+import { getFamilyName, loadCombinedFamilyMapping } from '../utils/familyMapping';
 
 const CorrelationAnalysis = () => {
   const {
@@ -17,6 +18,31 @@ const CorrelationAnalysis = () => {
   const [groupCorrelationResults, setGroupCorrelationResults] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [correlationMethod, setCorrelationMethod] = useState('pearson');
+  
+  // 新增：分组分析相关状态
+  const [groupByType, setGroupByType] = useState('none'); // 'none', 'family', 'region', 'macroarea'
+  const [groupedCorrelationResults, setGroupedCorrelationResults] = useState(null);
+  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [availableGroups, setAvailableGroups] = useState([]);
+  const [familyMapping, setFamilyMapping] = useState({});
+
+  // 语言配置
+  const t = langs[lang];
+
+  // 相关性方法选项
+  const correlationMethodOptions = [
+    { value: 'pearson', label: t.correlationMethodPearson || 'Pearson Correlation' },
+    { value: 'spearman', label: t.correlationMethodSpearman || 'Spearman Rank Correlation' },
+    { value: 'kendall', label: t.correlationMethodKendall || "Kendall's Tau" }
+  ];
+
+  // 分组类型选项
+  const groupTypeOptions = [
+    { value: 'none', label: t.groupAnalysisNone || 'No Grouping (Overall Analysis)' },
+    { value: 'family', label: t.groupAnalysisByFamily || 'Group by Language Family' },
+    { value: 'region', label: t.groupAnalysisByRegion || 'Group by Region' },
+    { value: 'macroarea', label: t.groupAnalysisByMacroarea || 'Group by Macro Area' }
+  ];
 
   // 计算皮尔逊相关系数 - 与原始HTML版本保持一致
   const calculatePearsonCorrelation = (x, y) => {
@@ -362,6 +388,7 @@ const CorrelationAnalysis = () => {
     if (allFeatures.length < 2) {
       setCorrelationResults(null);
       setGroupCorrelationResults(null);
+      setGroupedCorrelationResults(null);
       setIsCalculating(false);
       return;
     }
@@ -383,6 +410,7 @@ const CorrelationAnalysis = () => {
     if (validData.length < 10) {
       setCorrelationResults(null);
       setGroupCorrelationResults(null);
+      setGroupedCorrelationResults(null);
       setIsCalculating(false);
       return;
     }
@@ -443,6 +471,12 @@ const CorrelationAnalysis = () => {
     // 计算组间相关性
     const groupCorrelations = calculateGroupCorrelations(validData, allFeatures, correlationMethod);
 
+    // 新增：计算分组相关性（如果启用了分组）
+    let groupedResults = null;
+    if (groupByType !== 'none' && selectedGroups.length > 0) {
+      groupedResults = calculateGroupedCorrelations(validData, allFeatures, correlationMethod, groupByType, selectedGroups);
+    }
+
     setCorrelationResults({
       correlations,
       pValues,
@@ -457,6 +491,8 @@ const CorrelationAnalysis = () => {
       method: correlationMethod
     });
     
+    setGroupedCorrelationResults(groupedResults);
+    
     setIsCalculating(false);
   };
 
@@ -467,6 +503,211 @@ const CorrelationAnalysis = () => {
     if (pValue < 0.01) return '**';
     if (pValue < 0.05) return '*';
     return '';
+  };
+
+  // 新增：当语言数据或分组类型变化时，更新可用分组选项
+  React.useEffect(() => {
+    if (languageData && languageData.length > 0) {
+      const groups = getAvailableGroups();
+      setAvailableGroups(groups);
+      
+      // 如果当前选中的分组不在可用分组中，清空选择
+      if (groupByType !== 'none') {
+        const validSelectedGroups = selectedGroups.filter(group => groups.includes(group));
+        if (validSelectedGroups.length !== selectedGroups.length) {
+          setSelectedGroups(validSelectedGroups);
+        }
+      }
+    }
+  }, [languageData, groupByType]);
+
+  // 新增：组件挂载时初始化分组选项
+  React.useEffect(() => {
+    if (languageData && languageData.length > 0) {
+      const groups = getAvailableGroups();
+      setAvailableGroups(groups);
+    }
+  }, []);
+
+  // 新增：加载语系映射
+  React.useEffect(() => {
+    const loadFamilyMapping = async () => {
+      try {
+        const mapping = await loadCombinedFamilyMapping();
+        setFamilyMapping(mapping);
+      } catch (error) {
+        console.error('加载语系映射失败:', error);
+      }
+    };
+    
+    loadFamilyMapping();
+  }, []);
+
+  // 新增：获取可用的分组选项
+  const getAvailableGroups = () => {
+    if (!languageData || languageData.length === 0) return [];
+    
+    const groups = new Set();
+    languageData.forEach(lang => {
+      if (groupByType === 'family' && lang.Family_level_ID) {
+        groups.add(lang.Family_level_ID);
+      } else if (groupByType === 'region' && lang.region) {
+        groups.add(lang.region);
+      } else if (groupByType === 'macroarea' && lang.Macroarea) {
+        groups.add(lang.Macroarea);
+      }
+    });
+    
+    return Array.from(groups).sort();
+  };
+
+  // 新增：获取分组的显示名称（将ID转换为友好名称）
+  const getGroupDisplayName = (groupId) => {
+    if (groupByType === 'family') {
+      // 对于语系，使用语系名称而不是ID
+      return getFamilyName(groupId, familyMapping) || groupId;
+    } else {
+      // 对于地区和大区域，直接使用名称
+      return groupId;
+    }
+  };
+
+  // 新增：按分组计算相关性
+  const calculateGroupedCorrelations = (data, selectedFeatures, method, groupType, selectedGroups) => {
+    if (groupType === 'none' || selectedGroups.length === 0) return null;
+    
+    const results = {};
+    
+    selectedGroups.forEach(groupName => {
+      // 过滤该分组的数据
+      let groupData;
+      if (groupType === 'family') {
+        groupData = data.filter(lang => lang.Family_level_ID === groupName);
+      } else if (groupType === 'region') {
+        groupData = data.filter(lang => lang.region === groupName);
+      } else if (groupType === 'macroarea') {
+        groupData = data.filter(lang => lang.Macroarea === groupName);
+      }
+      
+      if (groupData.length < 5) {
+        // 样本太少，跳过
+        results[groupName] = { error: t.sampleSizeTooSmall || 'Sample size too small', sampleSize: groupData.length };
+        return;
+      }
+      
+      // 计算该分组内的特征相关性
+      const correlations = {};
+      const pValues = {};
+      
+      selectedFeatures.forEach(feature1 => {
+        correlations[feature1] = {};
+        pValues[feature1] = {};
+        
+        selectedFeatures.forEach(feature2 => {
+          if (feature1 === feature2) {
+            correlations[feature1][feature2] = 1;
+            pValues[feature1][feature2] = 0;
+          } else {
+            const values1 = groupData.map(d => {
+              let value = d[feature1];
+              if (feature1.startsWith('GB')) {
+                value = parseGBValue(value);
+              } else {
+                value = parseFloat(value);
+              }
+              return value;
+            });
+            
+            const values2 = groupData.map(d => {
+              let value = d[feature2];
+              if (feature2.startsWith('GB')) {
+                value = parseGBValue(value);
+              } else {
+                value = parseFloat(value);
+              }
+              return value;
+            });
+            
+            const result = correlationMethods[method].function(values1, values2);
+            correlations[feature1][feature2] = result.r;
+            pValues[feature1][feature2] = result.p;
+          }
+        });
+      });
+      
+      results[groupName] = {
+        correlations,
+        pValues,
+        sampleSize: groupData.length,
+        features: selectedFeatures
+      };
+    });
+    
+    return results;
+  };
+
+  // 新增：计算分组间的相关性差异
+  const calculateGroupDifferences = (groupedResults, selectedFeatures) => {
+    if (!groupedResults || Object.keys(groupedResults).length < 2) return null;
+    
+    const groupNames = Object.keys(groupedResults).filter(name => 
+      !groupedResults[name].error
+    );
+    
+    if (groupNames.length < 2) return null;
+    
+    const differences = {};
+    
+    selectedFeatures.forEach(feature1 => {
+      differences[feature1] = {};
+      selectedFeatures.forEach(feature2 => {
+        if (feature1 === feature2) {
+          differences[feature1][feature2] = { maxDiff: 0, groups: [] };
+          return;
+        }
+        
+        const correlations = groupNames.map(groupName => ({
+          group: groupName,
+          correlation: groupedResults[groupName].correlations[feature1][feature2],
+          pValue: groupedResults[groupName].pValues[feature1][feature2]
+        }));
+        
+        // 计算最大差异
+        const validCorrelations = correlations.filter(c => 
+          typeof c.correlation === 'number' && !isNaN(c.correlation)
+        );
+        
+        if (validCorrelations.length >= 2) {
+          const maxCorr = Math.max(...validCorrelations.map(c => c.correlation));
+          const minCorr = Math.min(...validCorrelations.map(c => c.correlation));
+          const maxDiff = maxCorr - minCorr;
+          
+          // 找出差异最大的组对
+          let maxDiffGroups = [];
+          for (let i = 0; i < validCorrelations.length; i++) {
+            for (let j = i + 1; j < validCorrelations.length; j++) {
+              const diff = Math.abs(validCorrelations[i].correlation - validCorrelations[j].correlation);
+              if (diff === maxDiff) {
+                maxDiffGroups = [
+                  { name: validCorrelations[i].group, correlation: validCorrelations[i].correlation },
+                  { name: validCorrelations[j].group, correlation: validCorrelations[j].correlation }
+                ];
+              }
+            }
+          }
+          
+          differences[feature1][feature2] = {
+            maxDiff,
+            groups: maxDiffGroups,
+            allCorrelations: correlations
+          };
+        } else {
+          differences[feature1][feature2] = { maxDiff: 0, groups: [] };
+        }
+      });
+    });
+    
+    return differences;
   };
 
   // 获取背景颜色 - 改进颜色区分
@@ -515,10 +756,110 @@ const CorrelationAnalysis = () => {
           onChange={(e) => setCorrelationMethod(e.target.value)}
           style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '12px', marginBottom: '8px' }}
         >
-          <option value="pearson">Pearson Correlation</option>
-          <option value="spearman">Spearman Rank Correlation</option>
-          <option value="kendall">Kendall's Tau</option>
+          {correlationMethodOptions.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
+        
+        {/* 新增：分组分析控制 */}
+        <div style={{ marginBottom: '8px' }}>
+          <label style={{ fontSize: '11px', color: '#666', display: 'block', marginBottom: '4px' }}>
+            {t.groupAnalysisType}:
+          </label>
+          <select 
+            value={groupByType}
+            onChange={(e) => {
+              setGroupByType(e.target.value);
+              setSelectedGroups([]);
+              setGroupedCorrelationResults(null);
+            }}
+            style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '11px' }}
+          >
+            {groupTypeOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        {/* 分组选择器 */}
+        {groupByType !== 'none' && (
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ fontSize: '11px', color: '#666', display: 'block', marginBottom: '4px' }}>
+              {t.selectGroupsToAnalyze?.replace('{type}', 
+                groupByType === 'family' ? t.languageFamily : 
+                groupByType === 'region' ? t.region : 
+                t.macroarea
+              ) || `Select ${groupByType === 'family' ? 'language families' : groupByType === 'region' ? 'regions' : 'macro areas'} to analyze:`}
+            </label>
+            
+            {/* 全选/全不选按钮 */}
+            <div style={{ marginBottom: '8px', display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  const groups = getAvailableGroups();
+                  setSelectedGroups(groups);
+                }}
+                style={{
+                  padding: '4px 8px',
+                  background: '#2c7c6c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontSize: '10px'
+                }}
+                title={t.selectAll}
+              >
+                {t.selectAll}
+              </button>
+              <button
+                onClick={() => setSelectedGroups([])}
+                style={{
+                  padding: '4px 8px',
+                  background: '#666',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontSize: '10px'
+                }}
+                title={t.deselectAll}
+              >
+                {t.deselectAll}
+              </button>
+              <span style={{ fontSize: '10px', color: '#666', lineHeight: '24px' }}>
+                {t.selectedCount?.replace('{count}', selectedGroups.length) || `Selected: ${selectedGroups.length}`}
+              </span>
+            </div>
+            
+            <div style={{ maxHeight: '100px', overflowY: 'auto', border: '1px solid #ddd', padding: '4px', borderRadius: '4px', background: '#f9f9f9' }}>
+              {(() => {
+                const groups = getAvailableGroups();
+                return groups.map(group => (
+                  <label key={group} style={{ display: 'block', fontSize: '11px', marginBottom: '2px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedGroups.includes(group)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedGroups([...selectedGroups, group]);
+                        } else {
+                          setSelectedGroups(selectedGroups.filter(g => g !== group));
+                        }
+                      }}
+                      style={{ marginRight: '4px' }}
+                    />
+                    {getGroupDisplayName(group)}
+                  </label>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
         
         <button
           onClick={calculateCorrelations}
@@ -534,16 +875,16 @@ const CorrelationAnalysis = () => {
             fontSize: '12px'
           }}
         >
-          {isCalculating ? 'Calculating...' : 'Calculate Correlations'}
+          {isCalculating ? (t.calculating || 'Calculating...') : (t.calculateCorrelations || 'Calculate Correlations')}
         </button>
       </div>
 
       {/* 组间相关性结果 */}
       {groupCorrelationResults && (
         <div id="group-correlation-results" className="correlation-results" style={{ display: 'block', marginTop: '15px' }}>
-          <h4>Group Correlations ({groupCorrelationResults.method.toUpperCase()})</h4>
+          <h4>{t.groupCorrelationTitle?.replace('{method}', groupCorrelationResults.method.toUpperCase()) || `${t.groupCorrelationTitleFallback || 'Group Correlations'} (${groupCorrelationResults.method.toUpperCase()})`}</h4>
           <p style={{ fontSize: '11px', color: '#666', marginBottom: '10px' }}>
-            Sample size: {groupCorrelationResults.sampleSize} languages
+            {t.groupCorrelationSampleSize?.replace('{size}', groupCorrelationResults.sampleSize)}
           </p>
           <div id="group-correlation-matrix" className="correlation-matrix">
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -626,7 +967,7 @@ const CorrelationAnalysis = () => {
                             e.target.style.transform = 'scale(1)';
                             e.target.style.boxShadow = 'none';
                           }}
-                          title="Click to get AI explanation of this correlation"
+                          title={t.clickToGetAIExplanation || 'Click to get AI explanation of this correlation'}
                         >
                           {typeof correlation === 'number' ? correlation.toFixed(3) : '0.000'}
                           {significance && (
@@ -649,12 +990,216 @@ const CorrelationAnalysis = () => {
         </div>
       )}
 
+      {/* 新增：分组相关性结果 */}
+      {groupedCorrelationResults && (
+        <div id="grouped-correlation-results" className="correlation-results" style={{ display: 'block', marginTop: '15px' }}>
+          <h4>{t.groupedCorrelationTitle} ({correlationMethod.toUpperCase()}) - {t.groupedCorrelationByType?.replace('{type}', 
+            groupByType === 'family' ? t.languageFamily : 
+            groupByType === 'region' ? t.region : 
+            t.macroarea
+          )}</h4>
+          
+          {/* 分组结果概览 */}
+          <div style={{ marginBottom: '15px' }}>
+            <h5 style={{ fontSize: '14px', marginBottom: '8px' }}>{t.groupOverviewTitle}</h5>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+              {Object.entries(groupedCorrelationResults).map(([groupName, result]) => (
+                <div key={groupName} style={{ 
+                  padding: '8px', 
+                  border: '1px solid #ddd', 
+                  borderRadius: '4px', 
+                  background: result.error ? '#fff3cd' : '#f8f9fa'
+                }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '4px' }}>
+                    {getGroupDisplayName(groupName)}
+                  </div>
+                  {result.error ? (
+                    <div style={{ fontSize: '11px', color: '#856404' }}>
+                      {result.error} ({t.sampleSize}: {result.sampleSize})
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '11px', color: '#666' }}>
+                      {t.sampleSize}: {result.sampleSize} {t.languages}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 分组相关性矩阵 */}
+          {Object.entries(groupedCorrelationResults).map(([groupName, result]) => {
+            if (result.error) return null;
+            
+            return (
+              <div key={groupName} style={{ marginBottom: '20px' }}>
+                <h5 style={{ fontSize: '13px', marginBottom: '8px', color: '#2c7c6c' }}>
+                  {getGroupDisplayName(groupName)} - {t.correlationMatrixTitle} ({t.sampleSize}: {result.sampleSize})
+                </h5>
+                <div className="correlation-matrix" style={{ overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', minWidth: '300px' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ background: '#f0f0f0', padding: '4px', border: '1px solid #ddd', fontSize: '9px' }}></th>
+                        {result.features.map(feature => (
+                          <th 
+                            key={feature}
+                            style={{ 
+                              background: '#f0f0f0', 
+                              textAlign: 'center', 
+                              padding: '4px',
+                              border: '1px solid #ddd',
+                              fontSize: '9px'
+                            }}
+                          >
+                            {feature}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.features.map(feature1 => (
+                        <tr key={feature1}>
+                          <th 
+                            style={{ 
+                              background: '#f0f0f0', 
+                              textAlign: 'left', 
+                              padding: '4px',
+                              border: '1px solid #ddd',
+                              fontSize: '9px'
+                            }}
+                          >
+                            {feature1}
+                          </th>
+                          {result.features.map(feature2 => {
+                            const correlation = result.correlations[feature1]?.[feature2] || 0;
+                            const pValue = result.pValues[feature1]?.[feature2] || 1;
+                            const significance = getSignificance(pValue);
+                            const bgColor = getBackgroundColor(correlation);
+                            const textColor = getTextColor(correlation);
+                            const isSignificant = typeof pValue === 'number' && pValue < 0.05;
+                            
+                            return (
+                              <td 
+                                key={feature2}
+                                style={{
+                                  textAlign: 'center',
+                                  padding: '2px',
+                                  background: bgColor,
+                                  fontWeight: isSignificant ? 'bold' : 'normal',
+                                  border: '1px solid #ddd',
+                                  fontSize: '8px',
+                                  borderRadius: '2px',
+                                  color: textColor
+                                }}
+                                title={`${feature1} ${t.vs} ${feature2}: ${correlation.toFixed(3)} (${t.pValue}: ${pValue.toFixed(4)})`}
+                              >
+                                {typeof correlation === 'number' ? correlation.toFixed(3) : '0.000'}
+                                {significance && (
+                                  <span style={{ 
+                                    fontSize: '7px', 
+                                    color: isSignificant ? '#d63384' : '#888',
+                                    fontWeight: 'bold'
+                                  }}>
+                                    {significance}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 新增：分组间差异分析 */}
+      {groupedCorrelationResults && Object.keys(groupedCorrelationResults).length >= 2 && (
+        <div id="group-differences" className="correlation-results" style={{ display: 'block', marginTop: '15px' }}>
+          <h4>{t.groupDifferencesTitle}</h4>
+          <p style={{ fontSize: '11px', color: '#666', marginBottom: '10px' }}>
+            {t.compareCorrelationPatterns?.replace('{type}', 
+              groupByType === 'family' ? t.languageFamily : 
+              groupByType === 'region' ? t.region : 
+              t.macroarea
+            )}
+          </p>
+          
+          {(() => {
+            const differences = calculateGroupDifferences(groupedCorrelationResults, selectedGBFeatures.concat(selectedEAFeatures));
+            if (!differences) return <div style={{ color: '#666', fontSize: '11px' }}>{t.cannotCalculateDifferences || '无法计算差异（需要至少2个有效分组）'}</div>;
+            
+            // 找出差异最大的特征对
+            const maxDifferences = [];
+            Object.entries(differences).forEach(([feature1, feature2Diffs]) => {
+              Object.entries(feature2Diffs).forEach(([feature2, diff]) => {
+                if (feature1 !== feature2 && diff.maxDiff > 0) {
+                  maxDifferences.push({
+                    feature1,
+                    feature2,
+                    maxDiff: diff.maxDiff,
+                    groups: diff.groups
+                  });
+                }
+              });
+            });
+            
+            // 按差异大小排序
+            maxDifferences.sort((a, b) => b.maxDiff - a.maxDiff);
+            
+            return (
+              <div>
+                <h5 style={{ fontSize: '13px', marginBottom: '8px', color: '#dc3545' }}>
+                  {t.maxDifferencesTitle} (10)
+                </h5>
+                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '10px' }}>
+                    <thead>
+                      <tr style={{ background: '#f8f9fa' }}>
+                        <th style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'left' }}>{t.featurePair}</th>
+                        <th style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>{t.maxDifference}</th>
+                        <th style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'left' }}>{t.groupsWithMaxDiff}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {maxDifferences.slice(0, 10).map((diff, index) => (
+                        <tr key={index} style={{ background: index % 2 === 0 ? '#fff' : '#f8f9fa' }}>
+                          <td style={{ padding: '6px', border: '1px solid #ddd', fontWeight: 'bold' }}>
+                            {diff.feature1} {t.vs} {diff.feature2}
+                          </td>
+                          <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', color: '#dc3545', fontWeight: 'bold' }}>
+                            {diff.maxDiff.toFixed(3)}
+                          </td>
+                          <td style={{ padding: '6px', border: '1px solid #ddd' }}>
+                            {diff.groups.map((group, i) => (
+                              <span key={i}>
+                                {getGroupDisplayName(group.name)}: {group.correlation.toFixed(3)}
+                                {i < diff.groups.length - 1 ? ' vs ' : ''}
+                              </span>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* 特征间相关性结果 */}
       {correlationResults && (
         <div id="correlation-results" className="correlation-results" style={{ display: 'block', marginTop: '15px' }}>
-          <h4>Feature Correlations ({correlationResults.method.toUpperCase()})</h4>
+          <h4>{t.featureCorrelationTitle} ({correlationResults.method.toUpperCase()})</h4>
           <p style={{ fontSize: '11px', color: '#666', marginBottom: '10px' }}>
-            Sample size: {correlationResults.sampleSize} languages
+            {t.featureCorrelationSampleSize?.replace('{size}', correlationResults.sampleSize)}
           </p>
           <div id="correlation-matrix" className="correlation-matrix">
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -737,7 +1282,7 @@ const CorrelationAnalysis = () => {
                             e.target.style.transform = 'scale(1)';
                             e.target.style.boxShadow = 'none';
                           }}
-                          title="Click to get AI explanation of this correlation"
+                          title={t.clickToGetAIExplanation || 'Click to get AI explanation of this correlation'}
                         >
                           {typeof correlation === 'number' ? correlation.toFixed(3) : '0.000'}
                           {significance && (

@@ -158,6 +158,7 @@ export const generateDataSummary = (data) => {
     features: {},
     regions: {},
     families: {},
+    familyNames: {},
     macroareas: {}
   };
 
@@ -182,6 +183,9 @@ export const generateDataSummary = (data) => {
     }
     if (lang.Family_level_ID) {
       summary.families[lang.Family_level_ID] = (summary.families[lang.Family_level_ID] || 0) + 1;
+    }
+    if (lang.Family_Name) {
+      summary.familyNames[lang.Family_Name] = (summary.familyNames[lang.Family_Name] || 0) + 1;
     }
     if (lang.Macroarea) {
       summary.macroareas[lang.Macroarea] = (summary.macroareas[lang.Macroarea] || 0) + 1;
@@ -219,6 +223,18 @@ export const downloadSummary = (data, filename = 'data_summary.txt') => {
       .forEach(([family, count]) => {
         report += `  ${family}: ${count} 个语言\n`;
       });
+
+    report += `\n语系名称分布:\n`;
+    if (summary.familyNames && Object.keys(summary.familyNames).length > 0) {
+      Object.entries(summary.familyNames)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 20) // 只显示前20个
+        .forEach(([familyName, count]) => {
+          report += `  ${familyName}: ${count} 个语言\n`;
+        });
+    } else {
+      report += `  无语系名称信息\n`;
+    }
 
     report += `\n大区域分布:\n`;
     Object.entries(summary.macroareas)

@@ -3,6 +3,12 @@ import { DataContext } from '../context/DataContext';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { gbFeatures, gbOrangeFeatures } from '../utils/featureData';
+import { parseNexusTree, parseNewickTree, getPhylogeneticInfo } from '../utils/phylogeneticTree';
+import { loadCombinedFamilyMapping, getFamilyName } from '../utils/familyMapping';
+
+
+
+
 
 const MapView = () => {
   const mapRef = useRef(null);
@@ -10,6 +16,56 @@ const MapView = () => {
   const { languageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages, featureDescriptions } = useContext(DataContext);
   const markersRef = useRef([]);
   const currentZoomRef = useRef(2);
+  const phylogeneticTreeRef = useRef(null);
+  const familyMappingRef = useRef({});
+
+  // 加载系统发育树数据和语系映射
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // 并行加载系统发育树和语系映射
+        const [phylogeneticResult, familyMapping] = await Promise.all([
+          (async () => {
+            try {
+              const response = await fetch('/EDGE_tree.nex');
+              const nexusContent = await response.text();
+              
+              // 解析NEXUS文件
+              const nexusResult = parseNexusTree(nexusContent);
+              if (nexusResult.success) {
+                // 解析Newick树
+                const newickResult = parseNewickTree(nexusResult.treeData.newick);
+                if (newickResult.success) {
+                  phylogeneticTreeRef.current = newickResult.tree;
+                  console.log('系统发育树加载成功:', newickResult.tree);
+                  return { success: true };
+                } else {
+                  console.error('解析Newick树失败:', newickResult.error);
+                  return { success: false, error: newickResult.error };
+                }
+              } else {
+                console.error('解析NEXUS文件失败:', nexusResult.error);
+                return { success: false, error: nexusResult.error };
+              }
+            } catch (error) {
+              console.error('加载系统发育树失败:', error);
+              return { success: false, error: error.message };
+            }
+          })(),
+          loadCombinedFamilyMapping()
+        ]);
+        
+        // 保存语系映射
+        familyMappingRef.current = familyMapping;
+        console.log('语系映射加载成功:', Object.keys(familyMapping).length, '个映射');
+        
+      } catch (error) {
+        console.error('加载数据失败:', error);
+      }
+    };
+    
+    loadData();
+  }, []);
 
   // 计算标记颜色 - 修复颜色逻辑
   const getPetalColor = (feature, value) => {
@@ -42,6 +98,11 @@ const MapView = () => {
     const popupContent = `
       <b>${lang.Name || lang.Language_ID}</b><br/>
       Language ID: ${lang.Language_ID}<br/>
+      ${lang.Family_level_ID ? `Language Family: ${getFamilyName(lang.Family_level_ID, familyMappingRef.current)}<br/>` : 'Language Family: none<br/>'}
+      ${lang.region ? `Region: ${lang.region}<br/>` : 'Region: none<br/>'}
+      ${lang.Macroarea ? `Macro Area: ${lang.Macroarea}<br/>` : 'Macro Area: none<br/>'}
+      <hr style="margin: 5px 0; border: none; border-top: 1px solid #ccc;">
+
       Size Value: ${sizeValue.toFixed(2)}<br/>
       ${featureData.map(f =>
         `<span style='cursor:pointer;color:#2c7c6c;text-decoration:underline' data-feature='${f.feature}'>${f.feature}</span>: ${lang[f.feature] !== undefined ? lang[f.feature] : 'N/A'}<br/>`

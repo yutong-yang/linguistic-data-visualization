@@ -34,6 +34,9 @@ const FeatureRecommendation = () => {
   const [discoveredFeatures, setDiscoveredFeatures] = useState([]);
   const [isExploring, setIsExploring] = useState(false);
 
+  // 语言配置
+  const t = langs[lang];
+
   // 获取所有可用特征和数据库概览
   useEffect(() => {
     if (languageData && languageData.length > 0) {
@@ -71,7 +74,7 @@ const FeatureRecommendation = () => {
       const ideas = generateResearchIdeas(query, recs, languageData);
       setResearchIdeas(ideas);
     } catch (error) {
-      console.error('生成推荐失败:', error);
+      console.error(t.generateRecommendationsError || '生成推荐失败:', error);
     } finally {
       setIsLoading(false);
       setIsExploring(false);
@@ -178,10 +181,17 @@ const FeatureRecommendation = () => {
 
 
   return (
-    <div className="feature-recommendation">
+    <div className="feature-recommendation" style={{
+      backgroundColor: '#f9f9f9',
+      padding: '12px',
+      borderRadius: '4px',
+      marginBottom: '20px',
+      border: '1px solid #ddd',
+      fontSize: '11px'
+    }}>
       {/* 调试信息 */}
-      <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-        当前选择: GB({selectedGBFeatures.length}) EA({selectedEAFeatures.length})
+      <div style={{ fontSize: '10px', color: '#666', marginBottom: '8px' }}>
+        {t.currentSelection}: GB({selectedGBFeatures.length}) EA({selectedEAFeatures.length})
       </div>
       
       {/* 成功消息 */}
@@ -189,13 +199,13 @@ const FeatureRecommendation = () => {
         <div style={{ 
           background: '#d4edda', 
           color: '#155724', 
-          padding: '8px 12px', 
-          borderRadius: '4px', 
-          marginBottom: '12px',
+          padding: '6px 10px', 
+          borderRadius: '3px', 
+          marginBottom: '10px',
           border: '1px solid #c3e6cb',
-          fontSize: '14px'
+          fontSize: '11px'
         }}>
-          ✅ 成功添加了 {addedFeaturesCount} 个新特征到选择中！
+          ✅ {t.successfullyAddedFeatures?.replace('{count}', addedFeaturesCount)}
         </div>
       )}
       
@@ -203,46 +213,68 @@ const FeatureRecommendation = () => {
       {databaseOverview && (
         <div style={{ 
           background: '#f8f9fa', 
-          border: '1px solid #dee2e6', 
-          borderRadius: '6px', 
-          padding: '12px', 
-          marginBottom: '16px',
-          fontSize: '13px'
+          border: '1px solid #ddd', 
+          borderRadius: '3px', 
+          padding: '8px', 
+          marginBottom: '12px',
+          fontSize: '10px'
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#495057' }}>
-            🗄️ 数据库概览
+          <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#666' }}>
+            🗄️ {t.databaseOverviewTitle}
           </div>
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            <span>📊 Grambank: {databaseOverview.grambankFeatures} 个语法特征</span>
-            <span>🌍 D-PLACE: {databaseOverview.dplaceFeatures} 个社会文化特征</span>
-            <span>📈 总计: {databaseOverview.totalFeatures} 个特征</span>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '9px' }}>
+            <span>📊 Grambank: {databaseOverview.grambankFeatures} {t.grammarFeatures}</span>
+            <span>🌍 D-PLACE: {databaseOverview.dplaceFeatures} {t.socialCulturalFeatures}</span>
+            <span>📈 {t.total}: {databaseOverview.totalFeatures} {t.features}</span>
           </div>
         </div>
       )}
       
-      <div className="recommendation-header">
-        <h3>🎯 {lang === 'zh' ? '智能特征推荐' : 'Smart Feature Recommendations'}</h3>
+      <div className="recommendation-header" style={{ marginBottom: '12px' }}>
+        <h4 style={{ 
+          margin: '0 0 8px 0', 
+          color: '#666', 
+          fontSize: '13px', 
+          fontWeight: 'normal' 
+        }}>
+          {t.smartFeatureRecommendationsTitle}
+        </h4>
         
         {/* AI推荐生成 */}
         <div className="ai-recommendation-container">
-          <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#495057' }}>
-            🤖 {lang === 'zh' ? 'AI智能推荐' : 'AI Smart Recommendations'}
-          </h4>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h5 style={{ margin: '0 0 6px 0', fontSize: '11px', color: '#666' }}>
+            🤖 {t.aiSmartRecommendations}
+          </h5>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <input
               type="text"
-              placeholder={lang === 'zh' ? '输入研究问题或关键词...' : 'Enter research question or keywords...'}
+              placeholder={t.enterResearchQuestionOrKeywords}
               value={aiQuery}
               onChange={(e) => setAiQuery(e.target.value)}
               className="feature-search-input"
-              style={{ flex: 1 }}
+              style={{ 
+                flex: 1, 
+                padding: '6px', 
+                border: '1px solid #ddd', 
+                borderRadius: '3px', 
+                fontSize: '10px' 
+              }}
             />
             <button
               onClick={() => generateRecommendations(aiQuery)}
               disabled={isLoading}
-              className="recommend-btn"
+              style={{
+                padding: '6px 8px',
+                backgroundColor: isLoading ? '#ccc' : '#2c7c6c',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                fontSize: '10px',
+                fontWeight: 'normal'
+              }}
             >
-              {isLoading ? '🔍' : '💡'} {lang === 'zh' ? '生成推荐' : 'Generate'}
+              {isLoading ? '🔍' : '💡'} {t.generateRecommendations}
             </button>
           </div>
         </div>
@@ -255,7 +287,7 @@ const FeatureRecommendation = () => {
       {/* 研究想法 */}
       {researchIdeas.length > 0 && (
         <div className="research-ideas-section">
-          <h4>🔬 {lang === 'zh' ? '研究建议' : 'Research Ideas'}</h4>
+          <h4>{t.researchIdeasTitle}</h4>
           <div className="ideas-grid">
             {researchIdeas.map((idea, index) => (
               <div key={index} className="idea-card">
@@ -269,7 +301,7 @@ const FeatureRecommendation = () => {
                   onClick={() => addFeaturesToSelection(idea.features)}
                   className="explore-idea-btn"
                 >
-                  🚀 {lang === 'zh' ? '探索这个想法' : 'Explore This Idea'}
+                  🚀 {t.exploreThisIdea}
                 </button>
               </div>
             ))}
@@ -280,7 +312,7 @@ const FeatureRecommendation = () => {
       {/* 发现的新特征 */}
       {discoveredFeatures.length > 0 && (
         <div className="discovered-features-section">
-          <h4>🔍 {lang === 'zh' ? '从数据库中发现的特征' : 'Discovered Features'} ({discoveredFeatures.length})</h4>
+          <h4>{t.discoveredFeaturesTitle} ({discoveredFeatures.length})</h4>
           <div className="discovered-features-grid">
             {discoveredFeatures.map((feature, index) => (
               <div key={index} className="discovered-feature-card">
@@ -301,7 +333,7 @@ const FeatureRecommendation = () => {
                       explainFeatureWithAI(feature);
                     }}
                     className="ai-explain-btn"
-                    title={lang === 'zh' ? '获取AI解释' : 'Get AI Explanation'}
+                    title={t.getAIExplanation}
                   >
                     🤖 AI
                   </button>
@@ -336,12 +368,12 @@ const FeatureRecommendation = () => {
       {recommendedFeatures.length > 0 && (
         <div className="recommended-features-section">
           <div className="section-header">
-            <h4>🔍 {lang === 'zh' ? '推荐特征' : 'Recommended Features'}</h4>
+            <h4>{t.recommendedFeaturesTitle}</h4>
             <button
               onClick={() => setShowAllFeatures(!showAllFeatures)}
               className="toggle-btn"
             >
-              {showAllFeatures ? '👁️' : '🔍'} {showAllFeatures ? (lang === 'zh' ? '隐藏' : 'Hide') : (lang === 'zh' ? '浏览' : 'Browse')}
+              {showAllFeatures ? '👁️' : '🔍'} {showAllFeatures ? (t.hide) : (t.browse)}
             </button>
           </div>
           
@@ -383,7 +415,7 @@ const FeatureRecommendation = () => {
                             }
                           }}
                           className="ai-explain-btn"
-                          title={lang === 'zh' ? '获取AI解释' : 'Get AI Explanation'}
+                          title={t.getAIExplanation}
                         >
                           🤖 AI
                         </button>
@@ -412,9 +444,9 @@ const FeatureRecommendation = () => {
                     </div>
                   );
                 })}
-                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '16px', color: '#666' }}>
-                  {lang === 'zh' ? `显示${recommendedFeatures.length}个推荐特征` : `Showing ${recommendedFeatures.length} recommended features`}
-                </div>
+                                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '16px', color: '#666' }}>
+                    {t.showingRecommendedFeatures?.replace('{count}', recommendedFeatures.length) || `显示${recommendedFeatures.length}个推荐特征`}
+                  </div>
               </div>
             </div>
           )}

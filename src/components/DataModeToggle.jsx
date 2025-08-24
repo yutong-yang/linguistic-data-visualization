@@ -1,6 +1,7 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { DataContext } from '../context/DataContext';
 import { downloadCSV, downloadJSON, downloadTSV, downloadSummary, smartDownload } from '../utils/downloadUtils';
+import { getFamilyName, loadCombinedFamilyMapping } from '../utils/familyMapping';
 
 const DataModeToggle = () => {
   const { 
@@ -8,13 +9,34 @@ const DataModeToggle = () => {
     toggleDataMode, 
     reloadData, 
     loading,
-    languageData 
+    languageData,
+    lang,
+    langs
   } = useContext(DataContext);
+  
+  const [familyMapping, setFamilyMapping] = useState({});
+
+  // 语言配置
+  const t = langs[lang];
+
+  // 加载语系映射
+  useEffect(() => {
+    const loadFamilyMapping = async () => {
+      try {
+        const mapping = await loadCombinedFamilyMapping();
+        setFamilyMapping(mapping);
+      } catch (error) {
+        console.error(t.loadFamilyMappingError || '加载语系映射失败:', error);
+      }
+    };
+    
+    loadFamilyMapping();
+  }, [t.loadFamilyMappingError]);
 
   // 下载静态数据功能
   const downloadStaticData = () => {
     if (!languageData || languageData.length === 0) {
-      alert('没有可下载的数据');
+      alert(t.noDataToDownload || '没有可下载的数据');
       return;
     }
 
@@ -22,6 +44,10 @@ const DataModeToggle = () => {
       // 准备下载的数据
       const downloadData = languageData.map(lang => {
         const row = { ...lang };
+        // 添加语系名称
+        if (lang.Family_level_ID) {
+          row.Family_Name = getFamilyName(lang.Family_level_ID, familyMapping);
+        }
         return row;
       });
 
@@ -57,22 +83,29 @@ const DataModeToggle = () => {
       // 清理URL对象
       URL.revokeObjectURL(url);
       
-      console.log(`成功下载 ${downloadData.length} 行静态数据`);
+      console.log(t.downloadSuccess?.replace('{count}', downloadData.length) || `成功下载 ${downloadData.length} 行静态数据`);
     } catch (error) {
-      console.error('下载静态数据时出错:', error);
-      alert('下载数据时出错，请检查控制台');
+      console.error(t.downloadDataError || '下载静态数据时出错:', error);
+      alert(t.downloadDataError || '下载数据时出错，请检查控制台');
     }
   };
 
   // 下载特定格式的静态数据
   const downloadStaticDataFormat = (format) => {
     if (!languageData || languageData.length === 0) {
-      alert('没有可下载的数据');
+      alert(t.noDataToDownload || '没有可下载的数据');
       return;
     }
 
     try {
-      const downloadData = languageData.map(lang => ({ ...lang }));
+      const downloadData = languageData.map(lang => {
+        const row = { ...lang };
+        // 添加语系名称
+        if (lang.Family_level_ID) {
+          row.Family_Name = getFamilyName(lang.Family_level_ID, familyMapping);
+        }
+        return row;
+      });
       const timestamp = new Date().toISOString().slice(0, 10);
       
       switch (format) {
@@ -93,8 +126,8 @@ const DataModeToggle = () => {
       }
       
     } catch (error) {
-      console.error(`下载${format}格式静态数据时出错:`, error);
-      alert(`下载${format}格式数据时出错，请检查控制台`);
+      console.error(t.downloadFormatError?.replace('{format}', format) || `下载${format}格式静态数据时出错:`, error);
+      alert(t.downloadFormatError?.replace('{format}', format) || `下载${format}格式数据时出错，请检查控制台`);
     }
   };
 
@@ -104,141 +137,152 @@ const DataModeToggle = () => {
       top: '20px',
       right: '20px',
       zIndex: 1000,
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      padding: '15px',
-      borderRadius: '8px',
-      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
-      border: '1px solid #ddd'
+      backgroundColor: 'rgba(249, 249, 249, 0.95)',
+      padding: '12px',
+      borderRadius: '4px',
+      boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
+      border: '1px solid #ddd',
+      fontSize: '11px',
+      minWidth: '200px'
     }}>
-      <div style={{ marginBottom: '10px' }}>
-        <strong>数据模式:</strong>
+      <div style={{ marginBottom: '8px' }}>
+        <strong style={{ color: '#666', fontSize: '12px', fontWeight: 'normal' }}>
+          {t.dataModeTitle || '数据模式'}:
+        </strong>
       </div>
       
-      <div style={{ marginBottom: '15px' }}>
-        <label style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+      <div style={{ marginBottom: '12px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', fontSize: '10px' }}>
           <input
             type="radio"
             checked={!useDynamicData}
             onChange={() => !useDynamicData || toggleDataMode()}
             disabled={loading}
+            style={{ marginRight: '6px' }}
           />
-          <span style={{ marginLeft: '8px' }}>静态数据 (预处理的CSV)</span>
+          <span style={{ color: '#666' }}>{t.staticDataLabel || '静态数据 (预处理的CSV)'}</span>
         </label>
         
-        <label style={{ display: 'flex', alignItems: 'center' }}>
+        <label style={{ display: 'flex', alignItems: 'center', fontSize: '10px' }}>
           <input
             type="radio"
             checked={useDynamicData}
             onChange={() => useDynamicData || toggleDataMode()}
             disabled={loading}
+            style={{ marginRight: '6px' }}
           />
-          <span style={{ marginLeft: '8px' }}>动态数据 (实时查询数据库)</span>
+          <span style={{ color: '#666' }}>{t.dynamicDataLabel || '动态数据 (实时查询数据库)'}</span>
         </label>
       </div>
       
-      <div style={{ fontSize: '12px', color: '#666', marginBottom: '15px' }}>
-        当前数据点: {languageData.length} 个语言
+      <div style={{ fontSize: '10px', color: '#666', marginBottom: '12px' }}>
+        {t.currentDataPoints?.replace('{count}', languageData.length) || `当前数据点: ${languageData.length} 个语言`}
       </div>
       
-      <button
-        onClick={reloadData}
-        disabled={loading}
-        style={{
-          padding: '8px 16px',
-          backgroundColor: loading ? '#ccc' : '#007bff',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          fontSize: '14px'
-        }}
-      >
-        {loading ? '加载中...' : '重新加载数据'}
-      </button>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+        <button
+          onClick={reloadData}
+          disabled={loading}
+          style={{
+            flex: 1,
+            padding: '6px 8px',
+            backgroundColor: loading ? '#ccc' : '#2c7c6c',
+            color: 'white',
+            border: 'none',
+            borderRadius: '3px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontSize: '10px',
+            fontWeight: 'normal'
+          }}
+        >
+          {loading ? t.loadingData || '加载中...' : t.reloadData || '重新加载数据'}
+        </button>
 
-      <button
-        onClick={downloadStaticData}
-        disabled={loading || !languageData || languageData.length === 0}
-        style={{
-          padding: '8px 16px',
-          backgroundColor: loading || !languageData || languageData.length === 0 ? '#ccc' : '#28a745',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: loading || !languageData || languageData.length === 0 ? 'not-allowed' : 'pointer',
-          fontSize: '14px',
-          marginLeft: '10px'
-        }}
-      >
-        {loading || !languageData || languageData.length === 0 ? '不可下载' : '下载静态数据'}
-      </button>
+        <button
+          onClick={downloadStaticData}
+          disabled={loading || !languageData || languageData.length === 0}
+          style={{
+            flex: 1,
+            padding: '6px 8px',
+            backgroundColor: loading || !languageData || languageData.length === 0 ? '#ccc' : '#2c7c6c',
+            color: 'white',
+            border: 'none',
+            borderRadius: '3px',
+            cursor: loading || !languageData || languageData.length === 0 ? 'not-allowed' : 'pointer',
+            fontSize: '10px',
+            fontWeight: 'normal'
+          }}
+        >
+          {loading || !languageData || languageData.length === 0 ? t.unavailableDownload || '不可下载' : t.downloadStaticData || '下载静态数据'}
+        </button>
+      </div>
 
       {/* 下载格式选择器 */}
       {!loading && languageData && languageData.length > 0 && (
-        <div style={{ marginTop: '10px', textAlign: 'center' }}>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>
-            选择下载格式:
+        <div style={{ marginTop: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
+            {t.chooseDownloadFormat || '选择下载格式'}:
           </div>
-          <div style={{ display: 'flex', gap: '5px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <button
               onClick={() => downloadStaticDataFormat('csv')}
               style={{
-                padding: '4px 8px',
-                backgroundColor: '#17a2b8',
+                padding: '3px 6px',
+                backgroundColor: '#2c7c6c',
                 color: 'white',
                 border: 'none',
                 borderRadius: '3px',
                 cursor: 'pointer',
-                fontSize: '10px'
+                fontSize: '9px'
               }}
-              title="CSV格式，兼容Excel"
+              title={t.csvFormatDescription || "CSV格式，兼容Excel"}
             >
-              CSV
+              {t.csvFormat || 'CSV'}
             </button>
             <button
               onClick={() => downloadStaticDataFormat('tsv')}
               style={{
-                padding: '4px 8px',
-                backgroundColor: '#6f42c1',
+                padding: '3px 6px',
+                backgroundColor: '#2c7c6c',
                 color: 'white',
                 border: 'none',
                 borderRadius: '3px',
                 cursor: 'pointer',
-                fontSize: '10px'
+                fontSize: '9px'
               }}
-              title="TSV格式，Excel友好"
+              title={t.tsvFormatDescription || "TSV格式，Excel友好"}
             >
-              TSV
+              {t.tsvFormat || 'TSV'}
             </button>
             <button
               onClick={() => downloadStaticDataFormat('json')}
               style={{
-                padding: '4px 8px',
-                backgroundColor: '#fd7e14',
+                padding: '3px 6px',
+                backgroundColor: '#2c7c6c',
                 color: 'white',
                 border: 'none',
                 borderRadius: '3px',
                 cursor: 'pointer',
-                fontSize: '10px'
+                fontSize: '9px'
               }}
-              title="JSON格式，便于程序处理"
+              title={t.jsonFormatDescription || "JSON格式，便于程序处理"}
             >
-              JSON
+              {t.jsonFormat || 'JSON'}
             </button>
             <button
               onClick={() => downloadStaticDataFormat('summary')}
               style={{
-                padding: '4px 8px',
-                backgroundColor: '#20c997',
+                padding: '3px 6px',
+                backgroundColor: '#2c7c6c',
                 color: 'white',
                 border: 'none',
                 borderRadius: '3px',
                 cursor: 'pointer',
-                fontSize: '10px'
+                fontSize: '9px'
               }}
-              title="数据摘要报告"
+              title={t.summaryFormatDescription || "数据摘要报告"}
             >
-              摘要
+              {t.summaryFormat || '摘要'}
             </button>
           </div>
         </div>
@@ -246,12 +290,12 @@ const DataModeToggle = () => {
       
       {loading && (
         <div style={{ 
-          marginTop: '10px', 
+          marginTop: '8px', 
           textAlign: 'center', 
-          color: '#007bff',
-          fontSize: '12px'
+          color: '#2c7c6c',
+          fontSize: '10px'
         }}>
-          ⏳ 正在处理数据...
+          {t.loadingDataMessage || '⏳ 正在处理数据...'}
         </div>
       )}
     </div>

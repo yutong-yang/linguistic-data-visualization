@@ -55,12 +55,11 @@ function AppInner() {
       <div className="left-panel">
         <FeatureSelector />
         <DynamicFeatureSelector />
-        <CorrelationAnalysis />
-        <KnowledgeBaseManager />
         <FeatureRecommendation />
-        <LinguisticKnowledgeBase />
-
+        <CorrelationAnalysis />
         <PhyloTree />
+        <KnowledgeBaseManager />
+        <LinguisticKnowledgeBase />
       </div>
       
       {/* 右侧地图面板 */}

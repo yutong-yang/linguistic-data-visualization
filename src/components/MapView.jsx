@@ -107,6 +107,18 @@ const MapView = () => {
       ${featureData.map(f =>
         `<span style='cursor:pointer;color:#2c7c6c;text-decoration:underline' data-feature='${f.feature}'>${f.feature}</span>: ${lang[f.feature] !== undefined ? lang[f.feature] : 'N/A'}<br/>`
       ).join('')}
+      <hr style="margin: 5px 0; border: none; border-top: 1px solid #ccc;">
+      <button id="explain-language-btn" style="
+        background: #2c7c6c; 
+        color: white; 
+        border: none; 
+        padding: 8px 12px; 
+        border-radius: 4px; 
+        cursor: pointer; 
+        font-size: 12px;
+        width: 100%;
+        margin-top: 5px;
+      ">💬 获取AI讲解</button>
     `;
 
     if (featureData.length === 1) {
@@ -140,6 +152,7 @@ const MapView = () => {
         setTimeout(() => {
           const popup = e.popup.getElement();
           if (popup) {
+            // 绑定特征名点击事件
             popup.querySelectorAll('[data-feature]').forEach(el => {
               const fid = el.getAttribute('data-feature');
               
@@ -162,6 +175,15 @@ const MapView = () => {
               };
               el.title = `${el.title || fid}\n\n点击查看详情，双击获取AI解释`;
             });
+
+            // 绑定语言讲解按钮点击事件
+            const explainBtn = popup.querySelector('#explain-language-btn');
+            if (explainBtn) {
+              explainBtn.onclick = () => {
+                // 发送语言信息给chatbox
+                sendLanguageToChat(lang, featureData);
+              };
+            }
           }
         }, 100);
       });
@@ -223,6 +245,7 @@ const MapView = () => {
       setTimeout(() => {
         const popup = e.popup.getElement();
         if (popup) {
+          // 绑定特征名点击事件
           popup.querySelectorAll('[data-feature]').forEach(el => {
             const fid = el.getAttribute('data-feature');
             
@@ -245,11 +268,48 @@ const MapView = () => {
             };
             el.title = `${el.title || fid}\n\n点击查看详情，双击获取AI解释`;
           });
+
+          // 绑定语言讲解按钮点击事件
+          const explainBtn = popup.querySelector('#explain-language-btn');
+          if (explainBtn) {
+            explainBtn.onclick = () => {
+              // 发送语言信息给chatbox
+              sendLanguageToChat(lang, featureData);
+            };
+          }
         }
       }, 100);
     });
 
     return marker;
+  };
+
+  // 发送语言信息给chatbox的函数
+  const sendLanguageToChat = (lang, featureData) => {
+    if (window.explainLanguage) {
+      // 构造语言信息对象
+      const languageInfo = {
+        id: lang.Language_ID,
+        name: lang.Name,
+        family: getFamilyName(lang.Family_level_ID, familyMappingRef.current),
+        region: lang.region,
+        macroarea: lang.Macroarea,
+        features: featureData.map(f => ({
+          id: f.feature,
+          value: lang[f.feature],
+          weight: f.weight,
+          isOrange: f.isOrange
+        })),
+        coordinates: {
+          latitude: lang.Latitude,
+          longitude: lang.Longitude
+        }
+      };
+      
+      window.explainLanguage(languageInfo);
+    } else {
+      console.warn('window.explainLanguage function not found');
+    }
   };
 
   // 自动缩放到高亮语言区域

@@ -177,6 +177,13 @@ const zh = {
   exploreThisIdea: "探索这个想法",
   discoveredFeaturesTitle: "🔍 从数据库中发现的特征",
   getAIExplanation: "获取AI解释",
+  // 地图弹窗相关
+  languageId: "语言ID",
+  none: "无",
+  sizeValue: "大小值",
+  na: "N/A",
+  clickToSeeDetails: "点击查看详情",
+  doubleClickToGetAIExplanation: "双击获取AI解释",
   recommendedFeaturesTitle: "🔍 推荐特征",
   hide: "隐藏",
   browse: "浏览",

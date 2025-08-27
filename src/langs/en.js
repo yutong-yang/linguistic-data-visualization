@@ -177,6 +177,13 @@ const en = {
   exploreThisIdea: "Explore This Idea",
   discoveredFeaturesTitle: "🔍 Discovered Features from Database",
   getAIExplanation: "Get AI Explanation",
+  // Map popup related
+  languageId: "Language ID",
+  none: "none",
+  sizeValue: "Size Value",
+  na: "N/A",
+  clickToSeeDetails: "Click to see details",
+  doubleClickToGetAIExplanation: "Double click to get AI explanation",
   recommendedFeaturesTitle: "🔍 Recommended Features",
   hide: "Hide",
   browse: "Browse",

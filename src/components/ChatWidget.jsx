@@ -649,6 +649,168 @@ Requirements: Concise, accurate, data-based.`;
     }
   };
 
+  // New method to handle language explanation requests from map
+  const explainLanguage = async (languageInfo) => {
+    if (!apiStatus.configured) {
+      const errorMsg = lang === 'zh' ? '请配置API Key以获取语言解释。' : 'Please configure your API Key to get language explanations.';
+      addMessage(errorMsg, false);
+      onShowApiKeyModal && onShowApiKeyModal();
+      return;
+    }
+
+    const isChinese = lang === 'zh';
+    
+    // 用户看到的简洁消息
+    const userMessage = isChinese 
+      ? `请分析语言：${languageInfo.name} (${languageInfo.id})`
+      : `Please analyze language: ${languageInfo.name} (${languageInfo.id})`;
+    
+    // 首先从知识库检索语言相关信息
+    let knowledgeContext = '';
+    try {
+      const { checkKnowledgeBaseStatus, buildRAGContext } = await import('../utils/knowledgeBaseUtils');
+      const isKnowledgeBaseAvailable = await checkKnowledgeBaseStatus();
+      if (isKnowledgeBaseAvailable) {
+        // 使用语言名称和语系进行检索
+        const searchQuery = `${languageInfo.name} ${languageInfo.family} language typology features analysis`;
+        knowledgeContext = await buildRAGContext(searchQuery, 10);
+      }
+    } catch (error) {
+      console.warn('知识库检索失败，将使用基础信息:', error);
+    }
+    
+    // 构造特征信息字符串
+    const featuresInfo = languageInfo.features.map(f => {
+      const featureDesc = featureDescriptions[f.id]?.description || '无描述';
+      const valueText = f.value !== null && f.value !== undefined ? f.value : 'N/A';
+      const weightText = f.weight ? `(权重: ${f.weight})` : '';
+      const colorType = f.isOrange ? '橙色特征' : '青色特征';
+      return `• ${f.id}: ${valueText} ${weightText} [${colorType}]\n  ${featureDesc}`;
+    }).join('\n\n');
+    
+    // 发送给AI的详细提示
+    const languageRequest = isChinese
+      ? `基于地图数据分析和讲解语言：${languageInfo.name}
+
+=== 语言基本信息 ===
+语言名称: ${languageInfo.name}
+语言ID: ${languageInfo.id}
+语系: ${languageInfo.family || '未知'}
+地理区域: ${languageInfo.region || '未知'}
+宏观区域: ${languageInfo.macroarea || '未知'}
+坐标: ${languageInfo.coordinates.latitude}, ${languageInfo.coordinates.longitude}
+
+=== 当前选中的特征分析 ===
+${featuresInfo}
+
+${knowledgeContext ? '=== 知识库中的相关研究 ===' + knowledgeContext : ''}
+
+**分析要求：**
+1. 重点分析该语言的现有特征特征，解释其语言学意义
+2. 基于特征值分析该语言在类型学中的位置和特点
+3. 结合地理和语系信息，分析特征分布的可能原因
+4. 回答要详实充分，一般控制在400-500字
+5. **结构化格式**：回答必须包含以下JSON结构，放在回答的最后：
+
+\`\`\`json
+{
+  "language_id": "${languageInfo.id}",
+  "language_name": "${languageInfo.name}",
+  "summary": "简要总结",
+  "geographic_context": "地理背景分析",
+  "family_characteristics": "语系特征分析",
+  "feature_analysis": "特征详细分析",
+  "typological_position": "类型学位置",
+  "cross_linguistic_comparison": "跨语言比较",
+  "research_insights": "研究发现",
+  "knowledge_base_evidence": "知识库证据",
+  "methodological_notes": "方法说明"
+}
+\`\`\`
+
+**回答格式：**
+**地理与语系背景**：[分析该语言的地理位置和语系归属的语言学意义]
+**特征特征分析**：[详细分析该语言在选中特征上的表现，重点解释特征值的语言学含义]
+**类型学定位**：[基于特征分析，确定该语言在语言类型学中的位置和特点]
+**跨语言比较**：[与其他相关语言的比较，突出该语言的独特性]
+${knowledgeContext ? '**研究证据**：[基于知识库的相关理论和实证发现]' : ''}
+**研究价值**：[该语言分析对语言类型学研究的贡献]
+
+**📚 数据来源：**
+- 地图数据：来自本地Grambank/D-PLACE数据库
+- 特征数据：当前选中的${languageInfo.features.length}个特征
+- 坐标信息：${languageInfo.coordinates.latitude}, ${languageInfo.coordinates.longitude}
+- 知识库：${knowledgeContext ? '已检索相关研究' : '未检索到相关研究'}
+
+要求：详实、基于数据、重点分析现有特征，必须包含完整的JSON结构。`
+      : `Analyze and explain language based on map data: ${languageInfo.name}
+
+=== Basic Language Information ===
+Language Name: ${languageInfo.name}
+Language ID: ${languageInfo.id}
+Language Family: ${languageInfo.family || 'Unknown'}
+Geographic Region: ${languageInfo.region || 'Unknown'}
+Macro Area: ${languageInfo.macroarea || 'Unknown'}
+Coordinates: ${languageInfo.coordinates.latitude}, ${languageInfo.coordinates.longitude}
+
+=== Current Selected Features Analysis ===
+${featuresInfo}
+
+${knowledgeContext ? '=== Related Research from Knowledge Base ===' + knowledgeContext : ''}
+
+**Analysis Requirements:**
+1. Focus on analyzing the current features of this language and explain their linguistic significance
+2. Based on feature values, analyze the language's position and characteristics in typology
+3. Combine geographic and family information to analyze possible reasons for feature distribution
+4. Response should be detailed and comprehensive, generally 400-500 words
+5. **Structured Format**: Response must include the following JSON structure at the end:
+
+\`\`\`json
+{
+  "language_id": "${languageInfo.id}",
+  "language_name": "${languageInfo.name}",
+  "summary": "Brief Summary",
+  "geographic_context": "Geographic Context Analysis",
+  "family_characteristics": "Family Characteristics Analysis",
+  "feature_analysis": "Detailed Feature Analysis",
+  "typological_position": "Typological Position",
+  "cross_linguistic_comparison": "Cross-linguistic Comparison",
+  "research_insights": "Research Insights",
+  "knowledge_base_evidence": "Knowledge Base Evidence",
+  "methodological_notes": "Methodological Notes"
+}
+\`\`\`
+
+**Response Format:**
+**Geographic & Family Background**: [Analyze the linguistic significance of the language's geographic location and family affiliation]
+**Feature Analysis**: [Detailed analysis of the language's performance on selected features, focusing on explaining the linguistic meaning of feature values]
+**Typological Positioning**: [Based on feature analysis, determine the language's position and characteristics in linguistic typology]
+**Cross-linguistic Comparison**: [Comparison with other related languages, highlighting the uniqueness of this language]
+${knowledgeContext ? '**Research Evidence**: [Related theories and empirical findings based on knowledge base]' : ''}
+**Research Value**: [The contribution of this language analysis to linguistic typology research]
+
+**📚 Data Sources:**
+- Map Data: From local Grambank/D-PLACE database
+- Feature Data: Currently selected ${languageInfo.features.length} features
+- Coordinate Information: ${languageInfo.coordinates.latitude}, ${languageInfo.coordinates.longitude}
+- Knowledge Base: ${knowledgeContext ? 'Related research retrieved' : 'No related research retrieved'}
+
+Requirements: Detailed, data-based, focus on analyzing current features, must include complete JSON structure.`;
+
+    // 添加用户消息
+    addMessage(userMessage, true);
+
+    try {
+      // 调用AI API
+      const response = await callGeminiAPI(languageRequest);
+      addMessage(response, false);
+    } catch (error) {
+      console.error('Language explanation error:', error);
+      const errorMessage = isChinese ? '获取语言解释时出错，请稍后重试。' : 'Error getting language explanation, please try again later.';
+      addMessage(errorMessage, false);
+    }
+  };
+
   // New method to handle recommendation explanation requests
   const explainRecommendation = async (recommendation) => {
     if (!apiStatus.configured) {
@@ -776,6 +938,9 @@ Use markdown formatting for better readability.`;
     window.explainFeature = (feature) => {
       explainFeature(feature);
     };
+    window.explainLanguage = (languageInfo) => {
+      explainLanguage(languageInfo);
+    };
     window.explainRecommendation = (recommendation) => {
       explainRecommendation(recommendation);
     };
@@ -784,9 +949,10 @@ Use markdown formatting for better readability.`;
       delete window.explainMethod;
       delete window.explainConcept;
       delete window.explainFeature;
+      delete window.explainLanguage;
       delete window.explainRecommendation;
     };
-  }, [explainCorrelation, explainMethod, explainConcept, explainFeature, explainRecommendation]);
+  }, [explainCorrelation, explainMethod, explainConcept, explainFeature, explainLanguage, explainRecommendation]);
 
   // Handle chat input
   const handleChatInput = async () => {

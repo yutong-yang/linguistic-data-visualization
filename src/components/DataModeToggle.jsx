@@ -133,17 +133,14 @@ const DataModeToggle = () => {
 
   return (
     <div className="data-mode-toggle" style={{
-      position: 'fixed',
-      top: '20px',
-      right: '20px',
-      zIndex: 1000,
-      backgroundColor: 'rgba(249, 249, 249, 0.95)',
+      backgroundColor: '#f9f9f9',
       padding: '12px',
       borderRadius: '4px',
-      boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
+      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
       border: '1px solid #ddd',
       fontSize: '11px',
-      minWidth: '200px'
+      minWidth: '200px',
+      marginBottom: '12px'
     }}>
       <div style={{ marginBottom: '8px' }}>
         <strong style={{ color: '#666', fontSize: '12px', fontWeight: 'normal' }}>

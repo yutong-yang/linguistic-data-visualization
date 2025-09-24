@@ -14,7 +14,12 @@ const ChatWidget = ({ onShowApiKeyModal }) => {
     langs
   } = useContext(DataContext);
 
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => [{
+    id: `welcome-${Date.now()}`,
+    text: langs[lang].welcome,
+    isUser: false,
+    timestamp: new Date().toLocaleTimeString()
+  }]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -56,14 +61,7 @@ const ChatWidget = ({ onShowApiKeyModal }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Add welcome message and update when language changes
-  useEffect(() => {
-    if (messages.length === 0) {
-      // 根据当前语言显示欢迎消息
-      const welcomeMessage = langs[lang].welcome;
-      addMessage(welcomeMessage, false);
-    }
-  }, []);
+  // Remove previous StrictMode/sessionStorage guard; initial welcome is injected via initial state
 
   // Update welcome message when language changes
   useEffect(() => {

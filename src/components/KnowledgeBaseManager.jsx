@@ -244,13 +244,8 @@ const KnowledgeBaseManager = () => {
       padding: '16px',
       marginBottom: '16px'
     }}>
-      <h3 style={{ 
-        margin: '0 0 12px 0', 
-        color: '#2c7c6c',
-        fontSize: '15px',
-        fontWeight: 'bold'
-      }}>
-        📚 {lang === 'zh' ? '知识库管理' : 'Knowledge Base Manager'}
+      <h3 style={{ margin: '0 0 12px 0', color: '#2c7c6c', fontSize: '15px', fontWeight: 'bold' }}>
+        📚 {lang === 'zh' ? '知识库管理' : 'Knowledge Base'}
       </h3>
 
       {/* 统一状态显示区域 */}

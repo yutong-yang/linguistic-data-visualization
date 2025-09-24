@@ -2,6 +2,7 @@ import * as d3 from 'd3';
 
 // 树文件列表
 export const treeFiles = [
+  { value: 'EDGE_tree.nex', label: 'EDGE Tree (566 languages) - Clean NEXUS format' },
   { value: 'abkh1242.trees', label: 'Abkhaz-Adyge (abkh1242)' },
   { value: 'afro1255.trees', label: 'Afro-Asiatic (afro1255)' },
   { value: 'algi1248.trees', label: 'Algic (algi1248)' },
@@ -115,8 +116,19 @@ export const treeFiles = [
 // 解析 NEXUS 格式的 tree 文件
 export function parseNexusTree(nexusText) {
   try {
-    // 提取 TREE 行中的 Newick 字符串
-    const treeMatch = nexusText.match(/TREE summary = \[.*\] (.*);/);
+    // 尝试匹配 D-PLACE 格式: TREE summary = [.*] (.*);
+    let treeMatch = nexusText.match(/TREE summary = \[.*\] (.*);/);
+    
+    // 如果没有找到，尝试匹配 EDGE_tree.nex 格式: TREE * UNTITLED = [&R] (.*)
+    if (!treeMatch) {
+      treeMatch = nexusText.match(/TREE \* UNTITLED = \[&R\] (.*)/);
+    }
+    
+    // 如果还是没有找到，尝试更通用的格式: TREE.*=.*\[.*\] (.*)
+    if (!treeMatch) {
+      treeMatch = nexusText.match(/TREE.*=.*\[.*\] (.*)/);
+    }
+    
     if (!treeMatch) {
       throw new Error('No valid tree found in NEXUS file');
     }
@@ -208,8 +220,10 @@ export function getDescendantLanguages(node, languageMapping) {
 
 // 使用 D3.js 渲染树
 export function renderD3Tree(treeData, container, onNodeClick, languageMapping) {
-  const width = container.clientWidth;
-  const height = container.clientHeight || 350;
+  // 获取容器的实际尺寸，减去padding
+  const containerRect = container.getBoundingClientRect();
+  const width = containerRect.width - 16; // 减去左右padding (8px * 2)
+  const height = containerRect.height - 16; // 减去上下padding (8px * 2)
   
   // 创建树布局
   const treeLayout = d3.tree().size([height, width - 100]);
@@ -228,18 +242,20 @@ export function renderD3Tree(treeData, container, onNodeClick, languageMapping) 
     .append('svg')
     .attr('width', width)
     .attr('height', height)
-    .style('background', 'white')
-    .call(
-      d3.zoom()
-        .scaleExtent([0.2, 3])
-        .on('zoom', function (event) {
-          g.attr('transform', event.transform);
-        })
-    );
+    .style('background', 'transparent');
 
   // 创建 group 用于 pan/zoom
   const g = svg.append('g')
     .attr('class', 'tree-group');
+
+  // 启用缩放和平移，并限制范围
+  const zoomBehavior = d3.zoom()
+    .scaleExtent([0.5, 3])
+    .translateExtent([[0, 0], [width, height]])
+    .on('zoom', function (event) {
+      g.attr('transform', event.transform);
+    });
+  svg.call(zoomBehavior);
 
   // 居中 tree
   const nodes = tree.descendants();
@@ -312,8 +328,13 @@ export async function loadAndParseTree(treeFileName) {
   }
   
   try {
-    // 构建文件路径
-    const treePath = `/dplace-cldf/cldf/trees/${treeFileName}`;
+    // 构建文件路径 - EDGE_tree.nex在根目录，其他文件在dplace-cldf子目录
+    let treePath;
+    if (treeFileName === 'EDGE_tree.nex') {
+      treePath = `/${treeFileName}`;
+    } else {
+      treePath = `/dplace-cldf/cldf/trees/${treeFileName}`;
+    }
     
     // 加载 tree 文件
     const response = await fetch(treePath);
@@ -322,8 +343,9 @@ export async function loadAndParseTree(treeFileName) {
     }
     
     const nexusText = await response.text();
-    const newickString = parseNexusTree(nexusText);
     
+    // 解析 NEXUS 文件获取 Newick 字符串
+    const newickString = parseNexusTree(nexusText);
     if (!newickString) {
       throw new Error('Could not parse tree from NEXUS file');
     }

@@ -10,9 +10,42 @@ body {
   height: 100vh;
 }
 
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* 顶部工具条 */
+.topbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.topbar-left { display: flex; align-items: center; gap: 8px; }
+.topbar-center { flex: 1; display: flex; justify-content: center; }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+
+.app-title { font-weight: 700; color: #2c7c6c; }
+
+.lang-btn {
+  background: #2c7c6c;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .container {
   display: flex;
-  height: 100vh;
+  height: calc(100vh - 48px);
 }
 
 /* 左侧面板 */
@@ -21,15 +54,59 @@ body {
   padding: 20px;
   overflow-y: auto;
   background-color: rgba(212, 218, 220);
-  height: 100vh;
+  height: calc(100vh - 48px);
   box-sizing: border-box;
 }
 
-/* 右侧面板 */
-.right-panel {
+/* 中间主视图 */
+.center-panel {
   width: 70%;
   position: relative;
-  height: 100vh;
+  height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs-header {
+  display: flex;
+  gap: 8px;
+  padding: 8px 8px 0 8px;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+}
+
+.tab-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: #f1f3f5;
+  border: 1px solid #dee2e6;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  color: #495057;
+}
+
+.tab-btn.active {
+  background: #ffffff;
+  color: #2c7c6c;
+  border-color: #cfd4da;
+  font-weight: 600;
+}
+
+.tabs-content {
+  flex: 1;
+  overflow: auto; /* 允许纵向滚动，便于相关性结果下滑查看 */
+  background: #fff;
+}
+
+.tab-panel { 
+  height: 100%;
+  padding: 8px; /* 让内容不贴边 */
+  box-sizing: border-box;
+}
+
+.tab-panel.map-tab {
+  padding: 0; /* 地图不需要内边距 */
 }
 
 /* 图表容器 */

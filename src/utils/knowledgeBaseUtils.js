@@ -247,8 +247,14 @@ export async function getSystemStatus() {
     return data;
   } catch (error) {
     console.error('获取系统状态失败:', error);
-    console.error('错误详情:', error.message, error.stack);
-    throw error;
+    console.error('错误详情:', error.message);
+    // 软失败：在后端未启动或网络错误时返回占位状态，避免打断UI
+    return {
+      status: 'unavailable',
+      knowledge_base_initialized: false,
+      message: 'backend not reachable',
+      total_files_in_repository: 0
+    };
   }
 }
 

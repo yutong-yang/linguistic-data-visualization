@@ -13,7 +13,7 @@ import { loadCombinedFamilyMapping, getFamilyName } from '../utils/familyMapping
 const MapView = () => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const { languageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages, featureDescriptions } = useContext(DataContext);
+  const { languageData, filteredLanguageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages, dorecoHighlightedLanguages, featureDescriptions } = useContext(DataContext);
   const markersRef = useRef([]);
   const currentZoomRef = useRef(2);
   const phylogeneticTreeRef = useRef(null);
@@ -85,7 +85,7 @@ const MapView = () => {
   };
 
   // 创建标记的函数
-  const createMarker = (lang, sizeValue, featureData, isHighlighted) => {
+  const createMarker = (lang, sizeValue, featureData, isTreeHighlighted, isDorecoHighlighted) => {
     // 地图缩放自适应 - 按照gender_analysis.html的方式
     const zoom = mapInstanceRef.current.getZoom();
     currentZoomRef.current = zoom;
@@ -128,9 +128,10 @@ const MapView = () => {
       const strokeColor = f.value === null || f.value === undefined ? 'rgba(200, 200, 200, 0.3)' : '#fff';
       const strokeWidth = f.value === null || f.value === undefined ? '0.5' : '0.5';
       
+      const highlightClass = isTreeHighlighted ? 'tree-highlighted' : (isDorecoHighlighted ? 'doreco-highlighted' : '');
       const svg = `
         <svg width="${svgSize}" height="${svgSize}" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">
-          <g class="${isHighlighted ? 'highlighted' : ''}">
+          <g class="${highlightClass}">
             <circle cx="${svgSize/2}" cy="${svgSize/2}" r="${radius}" fill="${color}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />
           </g>
         </svg>
@@ -140,7 +141,7 @@ const MapView = () => {
       const marker = L.marker([lang.Latitude, lang.Longitude], {
         icon: L.divIcon({
           html: svg,
-          className: `custom-icon${isHighlighted ? ' highlighted' : ''}`,
+          className: `custom-icon${highlightClass ? ` ${highlightClass}` : ''}`,
           iconSize: [svgSize, svgSize],
           iconAnchor: [svgSize/2, svgSize/2]
         })
@@ -223,9 +224,10 @@ const MapView = () => {
     });
 
     // SVG 图标
+    const highlightClass = isTreeHighlighted ? 'tree-highlighted' : (isDorecoHighlighted ? 'doreco-highlighted' : '');
     const svg = `
       <svg width="${svgSize}" height="${svgSize}" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">
-        <g class="${isHighlighted ? 'highlighted' : ''}">${paths.join('')}</g>
+        <g class="${highlightClass}">${paths.join('')}</g>
       </svg>
     `;
 
@@ -233,7 +235,7 @@ const MapView = () => {
     const marker = L.marker([lang.Latitude, lang.Longitude], {
       icon: L.divIcon({
         html: svg,
-        className: `custom-icon${isHighlighted ? ' highlighted' : ''}`,
+        className: `custom-icon${highlightClass ? ` ${highlightClass}` : ''}`,
         iconSize: [svgSize, svgSize],
         iconAnchor: [svgSize/2, svgSize/2]
       })
@@ -404,11 +406,11 @@ const MapView = () => {
         mapInstanceRef.current.off('zoomend', handleZoom);
       }
     };
-  }, [languageData, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, highlightedLanguages]);
+  }, [filteredLanguageData, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, highlightedLanguages, dorecoHighlightedLanguages]);
 
   // 渲染标记的函数
   const renderMarkers = () => {
-    if (!mapInstanceRef.current || loading || !languageData || languageData.length === 0) {
+    if (!mapInstanceRef.current || loading || !filteredLanguageData || filteredLanguageData.length === 0) {
       return;
     }
 
@@ -432,7 +434,7 @@ const MapView = () => {
     let filteredLanguages = 0;
     let displayedLanguages = 0;
 
-    languageData.forEach(lang => {
+    filteredLanguageData.forEach(lang => {
       if (!lang.Latitude || !lang.Longitude) return;
 
       totalLanguages++;
@@ -492,15 +494,16 @@ const MapView = () => {
         }).filter(f => f.weight > 0);
 
         // 检查是否高亮
-        const isHighlighted = highlightedLanguages.includes(lang.Name);
+        const isTreeHighlighted = highlightedLanguages.includes(lang.Name);
+        const isDorecoHighlighted = dorecoHighlightedLanguages.includes(lang.Name);
         
         // 调试信息
-        if (highlightedLanguages.length > 0) {
-          console.log('Checking highlight for:', lang.Name, 'Highlighted languages:', highlightedLanguages, 'Is highlighted:', isHighlighted);
+        if (highlightedLanguages.length > 0 || dorecoHighlightedLanguages.length > 0) {
+          console.log('Checking highlight for:', lang.Name, 'Tree highlighted:', isTreeHighlighted, 'DoReCo highlighted:', isDorecoHighlighted);
         }
 
         // 创建标记
-        const marker = createMarker(lang, sizeValue, featureData, isHighlighted);
+        const marker = createMarker(lang, sizeValue, featureData, isTreeHighlighted, isDorecoHighlighted);
         markersRef.current.push(marker);
         
         displayedLanguages++;
@@ -519,7 +522,7 @@ const MapView = () => {
   // 渲染标记
   useEffect(() => {
     renderMarkers();
-  }, [languageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages]);
+  }, [languageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages, dorecoHighlightedLanguages]);
 
   // 监听高亮语言变化，自动缩放到高亮区域
   useEffect(() => {

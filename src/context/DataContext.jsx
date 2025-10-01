@@ -11,6 +11,7 @@ const langs = { en, zh };
 
 export const DataProvider = ({ children }) => {
   const [languageData, setLanguageData] = useState([]);
+  const [filteredLanguageData, setFilteredLanguageData] = useState([]); // 筛选后的语言数据
   const [languageMapping, setLanguageMapping] = useState({}); // 存储语言名称到Glottocode的映射
   const [featureDescriptions, setFeatureDescriptions] = useState({});
   const [selectedGBFeatures, setSelectedGBFeatures] = useState([...gbFeatures, ...gbOrangeFeatures]); // 默认全选
@@ -29,6 +30,68 @@ export const DataProvider = ({ children }) => {
 
   // 高亮语言状态
   const [highlightedLanguages, setHighlightedLanguages] = useState([]);
+
+  // 语言筛选状态
+  const [languageFilter, setLanguageFilter] = useState(null); // null = all, array = filtered glottocodes
+  
+  // doreco筛选高亮状态
+  const [dorecoHighlightedLanguages, setDorecoHighlightedLanguages] = useState([]);
+  
+  // 特征筛选模式：'intersection' = 交集（必须拥有所有特征）, 'union' = 并集（拥有任意特征）
+  const [featureFilterMode, setFeatureFilterMode] = useState('intersection');
+
+  // 处理语言筛选
+  useEffect(() => {
+    if (!languageData || languageData.length === 0) {
+      setFilteredLanguageData([]);
+      return;
+    }
+
+    if (!languageFilter || languageFilter.length === 0) {
+      // 没有筛选，使用所有数据
+      setFilteredLanguageData(languageData);
+      console.log('Language filter: Using all languages', languageData.length);
+    } else {
+      // 应用筛选
+      const filtered = languageData.filter(lang => {
+        const glottocode = lang.Glottocode || lang.glottocode || lang.Language_ID;
+        return glottocode && languageFilter.includes(glottocode);
+      });
+      setFilteredLanguageData(filtered);
+      
+      // 打印详细的筛选结果
+      console.log('=== Language Filter Results ===');
+      console.log('Total languages in dataset:', languageData.length);
+      console.log('Filter criteria (DoReCo glottocodes):', languageFilter.length);
+      console.log('Languages found in dataset:', filtered.length);
+      
+      // 找出匹配和不匹配的语言
+      const matchedLanguages = [];
+      const unmatchedGlottocodes = [];
+      
+      languageFilter.forEach(dorecoGlottocode => {
+        const found = languageData.find(lang => {
+          const glottocode = lang.Glottocode || lang.glottocode || lang.Language_ID;
+          return glottocode === dorecoGlottocode;
+        });
+        
+        if (found) {
+          matchedLanguages.push({
+            name: found.Name || found.name,
+            glottocode: dorecoGlottocode,
+            family: found.Family_level_ID || found.family
+          });
+        } else {
+          unmatchedGlottocodes.push(dorecoGlottocode);
+        }
+      });
+      
+      console.log('=== Matched Languages ===');
+      console.log('Found in dataset:', matchedLanguages);
+      console.log('=== Unmatched DoReCo Glottocodes ===');
+      console.log('Not found in dataset:', unmatchedGlottocodes);
+    }
+  }, [languageData, languageFilter]);
 
   // 初始化默认权重
   useEffect(() => {
@@ -60,8 +123,8 @@ export const DataProvider = ({ children }) => {
   const loadDynamicData = async () => {
     setLoading(true);
     try {
-      console.log('Loading dynamic data...');
-      const dynamicData = await buildDynamicData(selectedGBFeatures, selectedEAFeatures);
+      console.log('Loading dynamic data with filter mode:', featureFilterMode);
+      const dynamicData = await buildDynamicData(selectedGBFeatures, selectedEAFeatures, featureFilterMode);
       
       // 构建语言名称到Glottocode的映射
       const nameToCodeMapping = {};
@@ -170,7 +233,7 @@ export const DataProvider = ({ children }) => {
     if (useDynamicData) {
       loadDynamicData();
     }
-  }, [selectedGBFeatures, selectedEAFeatures, useDynamicData]);
+  }, [selectedGBFeatures, selectedEAFeatures, useDynamicData, featureFilterMode]);
 
   // 加载特征描述
   useEffect(() => {
@@ -255,6 +318,7 @@ export const DataProvider = ({ children }) => {
 
   const contextValue = {
     languageData,
+    filteredLanguageData, // 添加筛选后的数据
     languageMapping,
     featureDescriptions,
     selectedGBFeatures,
@@ -276,7 +340,13 @@ export const DataProvider = ({ children }) => {
     showFeatureInfo,
     hideFeatureInfo,
     highlightedLanguages,
-    setHighlightedLanguages
+    setHighlightedLanguages,
+    languageFilter,
+    setLanguageFilter,
+    featureFilterMode,
+    setFeatureFilterMode,
+    dorecoHighlightedLanguages,
+    setDorecoHighlightedLanguages
   };
 
   return (

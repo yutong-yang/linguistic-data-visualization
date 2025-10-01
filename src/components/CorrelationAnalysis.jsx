@@ -6,12 +6,14 @@ import { getFamilyName, loadCombinedFamilyMapping } from '../utils/familyMapping
 const CorrelationAnalysis = () => {
   const {
     languageData,
+    filteredLanguageData,
     selectedGBFeatures,
     selectedEAFeatures,
     gbWeights,
     eaWeights,
     lang,
-    langs
+    langs,
+    featureFilterMode
   } = useContext(DataContext);
 
   const [correlationResults, setCorrelationResults] = useState(null);
@@ -393,18 +395,33 @@ const CorrelationAnalysis = () => {
       return;
     }
 
-    // 过滤有效数据 - 修复GB特征的处理
-    const validData = languageData.filter(lang => {
-      return allFeatures.every(feature => {
-        const value = lang[feature];
-        if (feature.startsWith('GB')) {
-          // GB特征：只有0、1、null三种值
-          return value === '0' || value === 0 || value === '1' || value === 1;
-        } else {
-          // EA特征：需要是有效数值
-          return value !== null && value !== undefined && value !== '' && !isNaN(value);
-        }
-      });
+    // 过滤有效数据 - 根据筛选模式处理
+    const validData = filteredLanguageData.filter(lang => {
+      if (featureFilterMode === 'intersection') {
+        // 交集模式：必须拥有所有特征的数据
+        return allFeatures.every(feature => {
+          const value = lang[feature];
+          if (feature.startsWith('GB')) {
+            // GB特征：只有0、1、null三种值
+            return value === '0' || value === 0 || value === '1' || value === 1;
+          } else {
+            // EA特征：需要是有效数值
+            return value !== null && value !== undefined && value !== '' && !isNaN(value);
+          }
+        });
+      } else {
+        // 并集模式：GB和EA特征之间也是取并集，拥有任意一个特征的数据即可
+        return allFeatures.some(feature => {
+          const value = lang[feature];
+          if (feature.startsWith('GB')) {
+            // GB特征：只有0、1、null三种值
+            return value === '0' || value === 0 || value === '1' || value === 1;
+          } else {
+            // EA特征：需要是有效数值
+            return value !== null && value !== undefined && value !== '' && !isNaN(value);
+          }
+        });
+      }
     });
 
     if (validData.length < 10) {
@@ -545,10 +562,10 @@ const CorrelationAnalysis = () => {
 
   // 新增：获取可用的分组选项
   const getAvailableGroups = () => {
-    if (!languageData || languageData.length === 0) return [];
+    if (!filteredLanguageData || filteredLanguageData.length === 0) return [];
     
     const groups = new Set();
-    languageData.forEach(lang => {
+    filteredLanguageData.forEach(lang => {
       if (groupByType === 'family' && lang.Family_level_ID) {
         groups.add(lang.Family_level_ID);
       } else if (groupByType === 'region' && lang.region) {

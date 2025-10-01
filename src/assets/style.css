@@ -260,6 +260,14 @@ body {
   filter: drop-shadow(0 0 8px rgba(255, 255, 0, 0.8));
 }
 
+.custom-icon.tree-highlighted {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 0, 0.8));
+}
+
+.custom-icon.doreco-highlighted {
+  filter: drop-shadow(0 0 8px rgba(255, 0, 255, 0.8));
+}
+
 /* 聊天组件 */
 .chat-widget {
   position: fixed;

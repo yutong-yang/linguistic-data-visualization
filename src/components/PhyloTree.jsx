@@ -113,6 +113,9 @@ const PhyloTree = ({ selectedTreeProp, autoLoad = false, controlOnly = false, on
   if (controlOnly) {
     return (
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#2c7c6c', whiteSpace: 'nowrap' }}>
+          {lang === 'zh' ? '家族筛选' : 'Family Filter'}:
+        </label>
         <select 
           id="tree-selector"
           value={selectedTree}
@@ -120,7 +123,7 @@ const PhyloTree = ({ selectedTreeProp, autoLoad = false, controlOnly = false, on
             setSelectedTree(e.target.value);
             if (onSelectChange) onSelectChange(e.target.value);
           }}
-          style={{ flex: 1, minWidth: 240, padding: '6px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '12px' }}
+          style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '12px', minWidth: 120 }}
         >
           <option value="">{langs[lang].selectFamily || 'Select a family'}</option>
           {treeFiles.map(tree => (

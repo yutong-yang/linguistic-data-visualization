@@ -259,8 +259,8 @@ async function loadEaVariables() {
 }
 
 // 动态构建数据
-export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures) {
-  console.log('Building dynamic data for features:', { selectedGbFeatures, selectedEaFeatures });
+export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, filterMode = 'intersection') {
+  console.log('Building dynamic data for features:', { selectedGbFeatures, selectedEaFeatures, filterMode });
   
   try {
     // 并行加载所有必要的数据
@@ -306,10 +306,22 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures) {
       const langSocieties = languageToSocieties[lang.glottocode] || [];
       
       // 检查是否有选中的GB特征
-      const hasSelectedGbFeatures = selectedGbFeatures.length > 0 && selectedGbFeatures.every(feature => {
-        const value = langGbValues[feature];
-        return value !== undefined && value !== 'NA' && value !== null && value !== '';
-      });
+      let hasSelectedGbFeatures = false;
+      if (selectedGbFeatures.length > 0) {
+        if (filterMode === 'intersection') {
+          // 交集模式：必须拥有所有特征
+          hasSelectedGbFeatures = selectedGbFeatures.every(feature => {
+            const value = langGbValues[feature];
+            return value !== undefined && value !== 'NA' && value !== null && value !== '';
+          });
+        } else {
+          // 并集模式：拥有任意一个特征即可
+          hasSelectedGbFeatures = selectedGbFeatures.some(feature => {
+            const value = langGbValues[feature];
+            return value !== undefined && value !== 'NA' && value !== null && value !== '';
+          });
+        }
+      }
       
       // 检查是否有选中的EA特征
       let hasSelectedEaFeatures = false;
@@ -320,43 +332,74 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures) {
           langSocieties.map(s => `${s.id} (${s.name})`)
         );
         
-        // 检查所有EA特征是否都有有效数据
-        const allEaFeaturesValid = selectedEaFeatures.every(feature => {
-          // 检查是否有任何society有这个特征的数据，且值不是NA
-          return langSocieties.some(soc => {
-            const socEaValues = eaValues[soc.id] || {};
-            const value = socEaValues[feature];
-            return value !== undefined && value !== 'NA' && value !== null && value !== '';
-          });
-        });
-        
-        if (allEaFeaturesValid) {
-          hasSelectedEaFeatures = true;
-          
-          // 收集所有EA特征值（从第一个有数据的society获取）
-          selectedEaFeatures.forEach(feature => {
-            for (const soc of langSocieties) {
+        if (filterMode === 'intersection') {
+          // 交集模式：检查所有EA特征是否都有有效数据
+          const allEaFeaturesValid = selectedEaFeatures.every(feature => {
+            // 检查是否有任何society有这个特征的数据，且值不是NA
+            return langSocieties.some(soc => {
               const socEaValues = eaValues[soc.id] || {};
               const value = socEaValues[feature];
-              if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
-                eaFeatureValues[feature] = value;
-                console.log(`Found EA feature ${feature} = ${value} for society ${soc.id}`);
-                break; // 找到第一个有效值就停止
-              }
-            }
+              return value !== undefined && value !== 'NA' && value !== null && value !== '';
+            });
           });
-        } else {
-          // 调试信息：显示缺失的EA特征
-          console.log(`Language ${lang.glottocode} missing some EA features:`, 
-            selectedEaFeatures.map(feature => {
-              const hasFeature = langSocieties.some(soc => {
+          
+          if (allEaFeaturesValid) {
+            hasSelectedEaFeatures = true;
+            
+            // 收集所有EA特征值（从第一个有数据的society获取）
+            selectedEaFeatures.forEach(feature => {
+              for (const soc of langSocieties) {
                 const socEaValues = eaValues[soc.id] || {};
-                return socEaValues[feature] !== undefined;
-              });
-              return { feature, hasData: hasFeature };
-            })
-          );
-          filteredLanguages++;
+                const value = socEaValues[feature];
+                if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+                  eaFeatureValues[feature] = value;
+                  console.log(`Found EA feature ${feature} = ${value} for society ${soc.id}`);
+                  break; // 找到第一个有效值就停止
+                }
+              }
+            });
+          } else {
+            // 调试信息：显示缺失的EA特征
+            console.log(`Language ${lang.glottocode} missing some EA features:`, 
+              selectedEaFeatures.map(feature => {
+                const hasFeature = langSocieties.some(soc => {
+                  const socEaValues = eaValues[soc.id] || {};
+                  return socEaValues[feature] !== undefined;
+                });
+                return { feature, hasData: hasFeature };
+              })
+            );
+            filteredLanguages++;
+          }
+        } else {
+          // 并集模式：检查是否有任意EA特征有有效数据
+          const hasAnyEaFeatures = selectedEaFeatures.some(feature => {
+            return langSocieties.some(soc => {
+              const socEaValues = eaValues[soc.id] || {};
+              const value = socEaValues[feature];
+              return value !== undefined && value !== 'NA' && value !== null && value !== '';
+            });
+          });
+          
+          if (hasAnyEaFeatures) {
+            hasSelectedEaFeatures = true;
+            
+            // 收集所有可用的EA特征值（从第一个有数据的society获取）
+            selectedEaFeatures.forEach(feature => {
+              for (const soc of langSocieties) {
+                const socEaValues = eaValues[soc.id] || {};
+                const value = socEaValues[feature];
+                if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+                  eaFeatureValues[feature] = value;
+                  console.log(`Found EA feature ${feature} = ${value} for society ${soc.id}`);
+                  break; // 找到第一个有效值就停止
+                }
+              }
+            });
+          } else {
+            console.log(`Language ${lang.glottocode} has no EA features data`);
+            filteredLanguages++;
+          }
         }
       } else {
         console.log(`No societies found for language ${lang.glottocode}`);
@@ -377,10 +420,43 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures) {
       }
       
       // 只有当语言有相关特征时才添加到结果中
-      // 如果有EA特征，必须所有EA特征都有数据才添加
-      if (selectedEaFeatures.length > 0) {
-        // 有EA特征时，必须所有EA特征都有数据
-        if (hasSelectedEaFeatures) {
+      if (filterMode === 'intersection') {
+        // 交集模式：GB和EA特征都需要满足各自的条件
+        if (selectedEaFeatures.length > 0) {
+          // 有EA特征时，必须所有EA特征都有数据
+          if (hasSelectedEaFeatures) {
+            const dataPoint = {
+              Language_ID: lang.glottocode,
+              Name: lang.name,
+              Latitude: lang.latitude,
+              Longitude: lang.longitude,
+              Family_level_ID: lang.family,
+              Macroarea: lang.macroarea,
+              region: langSocieties[0]?.region || '',
+              Soc_ID: langSocieties[0]?.id || ''
+            };
+            
+            // 添加GB特征值
+            selectedGbFeatures.forEach(feature => {
+              const value = langGbValues[feature];
+              if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+                dataPoint[feature] = value;
+              }
+            });
+            
+            // 添加EA特征值
+            selectedEaFeatures.forEach(feature => {
+              const value = eaFeatureValues[feature];
+              if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+                dataPoint[feature] = value;
+              }
+            });
+            
+            resultData.push(dataPoint);
+            displayedLanguages++;
+          }
+        } else if (hasSelectedGbFeatures) {
+          // 没有EA特征时，只检查GB特征
           const dataPoint = {
             Language_ID: lang.glottocode,
             Name: lang.name,
@@ -400,7 +476,32 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures) {
             }
           });
           
-          // 添加EA特征值
+          resultData.push(dataPoint);
+          displayedLanguages++;
+        }
+      } else {
+        // 并集模式：GB和EA特征之间也是取并集
+        if (hasSelectedGbFeatures || hasSelectedEaFeatures) {
+          const dataPoint = {
+            Language_ID: lang.glottocode,
+            Name: lang.name,
+            Latitude: lang.latitude,
+            Longitude: lang.longitude,
+            Family_level_ID: lang.family,
+            Macroarea: lang.macroarea,
+            region: langSocieties[0]?.region || '',
+            Soc_ID: langSocieties[0]?.id || ''
+          };
+          
+          // 添加GB特征值（如果有的话）
+          selectedGbFeatures.forEach(feature => {
+            const value = langGbValues[feature];
+            if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+              dataPoint[feature] = value;
+            }
+          });
+          
+          // 添加EA特征值（如果有的话）
           selectedEaFeatures.forEach(feature => {
             const value = eaFeatureValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
@@ -411,40 +512,17 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures) {
           resultData.push(dataPoint);
           displayedLanguages++;
         }
-      } else if (hasSelectedGbFeatures) {
-        // 没有EA特征时，只检查GB特征
-        const dataPoint = {
-          Language_ID: lang.glottocode,
-          Name: lang.name,
-          Latitude: lang.latitude,
-          Longitude: lang.longitude,
-          Family_level_ID: lang.family,
-          Macroarea: lang.macroarea,
-          region: langSocieties[0]?.region || '',
-          Soc_ID: langSocieties[0]?.id || ''
-        };
-        
-        // 添加GB特征值
-        selectedGbFeatures.forEach(feature => {
-          const value = langGbValues[feature];
-          if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
-            dataPoint[feature] = value;
-          }
-        });
-        
-        resultData.push(dataPoint);
-        displayedLanguages++;
       }
     });
     
     // 显示过滤统计信息
     if (selectedEaFeatures.length > 0 || selectedGbFeatures.length > 0) {
-      console.log(`Dynamic data filtering: ${totalLanguages} total languages, ${filteredLanguages} filtered out (missing features), ${displayedLanguages} displayed`);
+      console.log(`Dynamic data filtering (${filterMode} mode): ${totalLanguages} total languages, ${filteredLanguages} filtered out (missing features), ${displayedLanguages} displayed`);
       if (selectedGbFeatures.length > 0) {
-        console.log(`GB features required: ${selectedGbFeatures.join(', ')}`);
+        console.log(`GB features ${filterMode === 'intersection' ? 'required' : 'available'}: ${selectedGbFeatures.join(', ')}`);
       }
       if (selectedEaFeatures.length > 0) {
-        console.log(`EA features required: ${selectedEaFeatures.join(', ')}`);
+        console.log(`EA features ${filterMode === 'intersection' ? 'required' : 'available'}: ${selectedEaFeatures.join(', ')}`);
       }
     }
     

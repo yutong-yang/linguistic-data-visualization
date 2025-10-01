@@ -10,6 +10,7 @@ const DataModeToggle = () => {
     reloadData, 
     loading,
     languageData,
+    filteredLanguageData,
     lang,
     langs
   } = useContext(DataContext);
@@ -35,14 +36,14 @@ const DataModeToggle = () => {
 
   // 下载静态数据功能
   const downloadStaticData = () => {
-    if (!languageData || languageData.length === 0) {
+    if (!filteredLanguageData || filteredLanguageData.length === 0) {
       alert(t.noDataToDownload || '没有可下载的数据');
       return;
     }
 
     try {
       // 准备下载的数据
-      const downloadData = languageData.map(lang => {
+      const downloadData = filteredLanguageData.map(lang => {
         const row = { ...lang };
         // 添加语系名称
         if (lang.Family_level_ID) {
@@ -173,7 +174,7 @@ const DataModeToggle = () => {
       </div>
       
       <div style={{ fontSize: '10px', color: '#666', marginBottom: '12px' }}>
-        {t.currentDataPoints?.replace('{count}', languageData.length) || `当前数据点: ${languageData.length} 个语言`}
+        {t.currentDataPoints?.replace('{count}', filteredLanguageData.length) || `当前数据点: ${filteredLanguageData.length} 个语言`}
       </div>
       
       <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>

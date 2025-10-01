@@ -15,7 +15,9 @@ const FeatureSelector = () => {
     setEaWeights,
     showFeatureInfo,
     lang,
-    langs
+    langs,
+    featureFilterMode,
+    setFeatureFilterMode
   } = useContext(DataContext);
 
   // 初始化权重
@@ -336,6 +338,51 @@ const FeatureSelector = () => {
             EA: {selectedEAFeatures.slice(0, 5).join(', ')}{selectedEAFeatures.length > 5 ? '...' : ''}
           </div>
         )}
+      </div>
+      
+      {/* 筛选模式切换 */}
+      <div style={{ marginBottom: '12px', padding: '8px', background: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}>
+        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: '#495057' }}>
+          {lang === 'zh' ? '筛选模式' : 'Filter Mode'}:
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            onClick={() => setFeatureFilterMode('intersection')}
+            style={{
+              padding: '6px 12px',
+              background: featureFilterMode === 'intersection' ? '#2c7c6c' : '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 'bold'
+            }}
+          >
+            {lang === 'zh' ? '交集 (所有特征)' : 'Intersection (All Features)'}
+          </button>
+          <button
+            onClick={() => setFeatureFilterMode('union')}
+            style={{
+              padding: '6px 12px',
+              background: featureFilterMode === 'union' ? '#2c7c6c' : '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 'bold'
+            }}
+          >
+            {lang === 'zh' ? '并集 (任意特征)' : 'Union (Any Feature)'}
+          </button>
+        </div>
+        <div style={{ fontSize: '10px', color: '#6c757d', marginTop: '4px' }}>
+          {featureFilterMode === 'intersection' 
+            ? (lang === 'zh' ? '语言必须拥有所有选中特征的数据（GB和EA特征都需满足）' : 'Languages must have data for ALL selected features (both GB and EA features required)')
+            : (lang === 'zh' ? '语言只需拥有任意一个选中特征的数据（GB和EA特征之间也是取并集）' : 'Languages need data for ANY selected feature (union between GB and EA features)')
+          }
+        </div>
       </div>
       <div className="feature-selector">
         {/* EA 特征选择 */}

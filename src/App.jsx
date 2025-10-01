@@ -3,6 +3,7 @@ import './assets/style.css';
 import FeatureWorkbench from './components/FeatureWorkbench';
 import CorrelationAnalysis from './components/CorrelationAnalysis';
 import PhyloTree from './components/PhyloTree';
+import LanguageFilter from './components/LanguageFilter';
 import ChatWidget from './components/ChatWidget';
 import FeatureInfoModal from './components/FeatureInfoModal';
 import ApiKeyModal from './components/ApiKeyModal';
@@ -18,7 +19,7 @@ function AppInner() {
   const [activeTab, setActiveTab] = useState('map'); // map | correlation
   const [showTreeOverlay, setShowTreeOverlay] = useState(false);
   const [showKB, setShowKB] = useState(false);
-  const { lang, setLang } = useContext(DataContext);
+  const { lang, setLang, languageFilter, setLanguageFilter } = useContext(DataContext);
 
   const handleApiKeySet = () => {
     console.log('API Key has been set successfully');
@@ -110,24 +111,28 @@ function AppInner() {
           </div>
           <div className="tabs-content">
             {/* 始终挂载组件，仅切换显示，防止状态丢失 */}
-            <div className="tab-panel map-tab" style={{ display: activeTab === 'map' ? 'block' : 'none', position: 'relative', height: '100%' }}>
-              {/* 仅保留一行筛选器 */}
-              <div style={{ padding: 8, paddingBottom: 0, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1001, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(2px)' }}>
-                <PhyloTree 
-                  controlOnly 
-                  onLoad={(selectedTree) => {
-                    setShowTreeOverlay(true);
-                    // 触发树数据加载到浮层
-                    setTimeout(() => {
-                      const overlayContainer = document.getElementById('tree-overlay-container');
-                      if (overlayContainer) {
-                        // 重新渲染树到浮层容器
-                        loadTreeToOverlay(selectedTree, overlayContainer);
-                      }
-                    }, 100);
-                  }} 
-                />
-              </div>
+        <div className="tab-panel map-tab" style={{ display: activeTab === 'map' ? 'block' : 'none', position: 'relative', height: '100%' }}>
+          {/* 筛选器行 */}
+          <div style={{ padding: 8, paddingBottom: 0, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1001, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(2px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* 左侧：语言筛选器 */}
+            <LanguageFilter />
+            
+            {/* 右侧：家族筛选器 */}
+            <PhyloTree 
+              controlOnly 
+              onLoad={(selectedTree) => {
+                setShowTreeOverlay(true);
+                // 触发树数据加载到浮层
+                setTimeout(() => {
+                  const overlayContainer = document.getElementById('tree-overlay-container');
+                  if (overlayContainer) {
+                    // 重新渲染树到浮层容器
+                    loadTreeToOverlay(selectedTree, overlayContainer);
+                  }
+                }, 100);
+              }} 
+            />
+          </div>
               {/* 地图容器 */}
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <MapView />

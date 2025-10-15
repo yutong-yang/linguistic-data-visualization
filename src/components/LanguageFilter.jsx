@@ -30,7 +30,6 @@ const LanguageFilter = () => {
             };
           });
         setDorecoLanguages(languages);
-        console.log('Loaded DoReCo languages:', languages.length);
       } catch (error) {
         console.error('Failed to load DoReCo languages:', error);
       }
@@ -93,13 +92,6 @@ const LanguageFilter = () => {
       setSelectedFilter('custom');
       setSearchQuery(language.Name || language.name);
       setShowSearchResults(false);
-      
-      console.log('=== Single Language Selected ===');
-      console.log('Selected language:', {
-        name: language.Name || language.name,
-        glottocode: glottocode,
-        family: language.Family_level_ID || language.family
-      });
     }
   };
 
@@ -110,7 +102,6 @@ const LanguageFilter = () => {
       setLanguageFilter(null); // null表示不过滤
       setSearchQuery('');
       setDorecoHighlightedLanguages([]); // 清除doreco高亮
-      console.log('Language filter: All languages selected');
     } else if (filter === 'doreco') {
       const dorecoGlottocodes = dorecoLanguages.map(lang => lang.glottocode);
       setLanguageFilter(dorecoGlottocodes);
@@ -130,15 +121,10 @@ const LanguageFilter = () => {
       setDorecoHighlightedLanguages(dorecoLanguageNames);
       
       // 打印调试信息
-      console.log('=== DoReCo Language Filter Debug ===');
-      console.log('DoReCo languages loaded:', dorecoLanguages.length);
-      console.log('DoReCo glottocodes:', dorecoGlottocodes);
-      console.log('DoReCo language names for highlighting:', dorecoLanguageNames);
       
       // 这里需要等待DataContext更新filteredLanguageData后再打印
       setTimeout(() => {
         // 通过DataContext获取当前的语言数据进行比较
-        console.log('Filter applied, checking results...');
       }, 100);
     } else if (filter === 'custom') {
       setDorecoHighlightedLanguages([]); // 清除doreco高亮

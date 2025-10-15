@@ -43,7 +43,6 @@ export const downloadCSV = (data, filename = 'linguistic_data.csv') => {
     // 清理URL对象
     URL.revokeObjectURL(url);
     
-    console.log(`成功下载 ${downloadData.length} 行数据到 ${filename}`);
     return true;
   } catch (error) {
     console.error('下载CSV数据时出错:', error);
@@ -73,7 +72,6 @@ export const downloadJSON = (data, filename = 'linguistic_data.json') => {
     
     URL.revokeObjectURL(url);
     
-    console.log(`成功下载 ${data.length} 行JSON数据到 ${filename}`);
     return true;
   } catch (error) {
     console.error('下载JSON数据时出错:', error);
@@ -118,7 +116,6 @@ export const downloadTSV = (data, filename = 'linguistic_data.tsv') => {
     
     URL.revokeObjectURL(url);
     
-    console.log(`成功下载 ${downloadData.length} 行TSV数据到 ${filename}`);
     return true;
   } catch (error) {
     console.error('下载TSV数据时出错:', error);
@@ -271,7 +268,6 @@ export const downloadSummary = (data, filename = 'data_summary.txt') => {
     
     URL.revokeObjectURL(url);
     
-    console.log(`成功下载数据摘要到 ${filename}`);
     return true;
   } catch (error) {
     console.error('下载数据摘要时出错:', error);

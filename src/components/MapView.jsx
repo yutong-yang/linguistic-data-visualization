@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useContext } from 'react';
 import { DataContext } from '../context/DataContext';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import * as d3 from 'd3';
 import { gbFeatures, gbOrangeFeatures } from '../utils/featureData';
 import { parseNexusTree, parseNewickTree, getPhylogeneticInfo } from '../utils/phylogeneticTree';
 import { loadCombinedFamilyMapping, getFamilyName } from '../utils/familyMapping';
@@ -13,11 +14,29 @@ import { loadCombinedFamilyMapping, getFamilyName } from '../utils/familyMapping
 const MapView = () => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const { languageData, filteredLanguageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages, dorecoHighlightedLanguages, featureDescriptions } = useContext(DataContext);
+  const { languageData, filteredLanguageData, loading, selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures, gbWeights, eaWeights, walsWeights, showFeatureInfo, highlightedLanguages, dorecoHighlightedLanguages, featureDescriptions, categoricalFilters } = useContext(DataContext);
   const markersRef = useRef([]);
   const currentZoomRef = useRef(2);
   const phylogeneticTreeRef = useRef(null);
   const familyMappingRef = useRef({});
+  const walsCodesRef = useRef({});
+  const eaCodesRef = useRef({});
+  
+  // 定义分类特征的颜色池（使用ColorBrewer的Qualitative色板）
+  const categoricalColorPalette = [
+    '#e41a1c', // 红色
+    '#377eb8', // 蓝色
+    '#4daf4a', // 绿色
+    '#984ea3', // 紫色
+    '#ff7f00', // 橙色
+    '#ffff33', // 黄色
+    '#a65628', // 棕色
+    '#f781bf', // 粉色
+    '#999999', // 灰色
+    '#66c2a5', // 青绿色
+    '#fc8d62', // 浅橙色
+    '#8da0cb'  // 浅蓝色
+  ];
 
   // 加载系统发育树数据和语系映射
   useEffect(() => {
@@ -37,7 +56,6 @@ const MapView = () => {
                 const newickResult = parseNewickTree(nexusResult.treeData.newick);
                 if (newickResult.success) {
                   phylogeneticTreeRef.current = newickResult.tree;
-                  console.log('系统发育树加载成功:', newickResult.tree);
                   return { success: true };
                 } else {
                   console.error('解析Newick树失败:', newickResult.error);
@@ -57,7 +75,48 @@ const MapView = () => {
         
         // 保存语系映射
         familyMappingRef.current = familyMapping;
-        console.log('语系映射加载成功:', Object.keys(familyMapping).length, '个映射');
+        
+        // 加载D-PLACE codes
+        try {
+          const response = await fetch('/dplace-cldf/cldf/codes.csv');
+          const text = await response.text();
+          const data = d3.csvParse(text);
+          const codes = {};
+          
+          data.forEach(row => {
+            if (row.ID) {
+              codes[row.ID] = {
+                name: row.Name,
+                description: row.Description || row.Name
+              };
+            }
+          });
+          
+          eaCodesRef.current = codes;
+        } catch (error) {
+          console.error('加载EA codes失败:', error);
+        }
+        
+        // 加载WALS codes
+        try {
+          const response = await fetch('/cldf-datasets-wals-014143f/cldf/codes.csv');
+          const text = await response.text();
+          const data = d3.csvParse(text);
+          const codes = {};
+          
+          data.forEach(row => {
+            if (row.ID) {
+              codes[row.ID] = {
+                name: row.Name,
+                description: row.Description || row.Name
+              };
+            }
+          });
+          
+          walsCodesRef.current = codes;
+        } catch (error) {
+          console.error('加载WALS codes失败:', error);
+        }
         
       } catch (error) {
         console.error('加载数据失败:', error);
@@ -84,16 +143,64 @@ const MapView = () => {
     }
   };
 
+  // 获取特征对应的颜色（基于特征ID的哈希，保持稳定）
+  const getFeatureColor = (featureId) => {
+    // 使用简单的字符串哈希函数
+    let hash = 0;
+    for (let i = 0; i < featureId.length; i++) {
+      hash = ((hash << 5) - hash) + featureId.charCodeAt(i);
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    const index = Math.abs(hash) % categoricalColorPalette.length;
+    return categoricalColorPalette[index];
+  };
+
   // 创建标记的函数
-  const createMarker = (lang, sizeValue, featureData, isTreeHighlighted, isDorecoHighlighted) => {
+  const createMarker = (lang, sizeValue, featureData, isTreeHighlighted, isDorecoHighlighted, matchedCategoricalFeatures) => {
     // 地图缩放自适应 - 按照gender_analysis.html的方式
     const zoom = mapInstanceRef.current.getZoom();
     currentZoomRef.current = zoom;
     const zoomFactor = Math.max(0.7, Math.min(2, zoom / 3));
     const baseRadius = Math.max(8, Math.min(14, 8 + sizeValue * 0.5));
     const radius = baseRadius * zoomFactor;
-    const svgSize = Math.ceil(radius * 2.2);
+    // 计算需要的额外空间（如果有分类筛选边框）
+    const maxBorderLayers = matchedCategoricalFeatures?.length || 0;
+    const extraSpace = maxBorderLayers > 0 ? maxBorderLayers * 2 + 4 : 0;
+    const svgSize = Math.ceil(radius * 2.2 + extraSpace * 2);
 
+    // 构建EA特征显示内容
+    const eaFeaturesHtml = selectedEAFeatures && selectedEAFeatures.length > 0 
+      ? selectedEAFeatures.map((feature, idx) => {
+          const value = lang[feature];
+          let displayValue = value !== undefined && value !== null ? value : 'N/A';
+          const featureInfo = featureDescriptions[feature];
+          const featureType = featureInfo?.type ? `[${featureInfo.type}]` : '';
+          
+          // 对于EA特征，尝试查找code描述
+          if (value !== undefined && value !== null && value !== 'N/A' && value !== '') {
+            const codeId = `${feature}-${value}`;
+            const codeInfo = eaCodesRef.current[codeId];
+            if (codeInfo) {
+              displayValue = `${value} (${codeInfo.name})`;
+            }
+          }
+          return `<span style='cursor:pointer;color:#ff6b35;text-decoration:underline' data-feature='${feature}'>${feature}</span> ${featureType}: ${displayValue}<br/>`;
+        }).join('')
+      : '';
+    
+    // 构建WALS特征显示内容
+    const walsFeaturesHtml = selectedWALSFeatures && selectedWALSFeatures.length > 0
+      ? selectedWALSFeatures.map(feature => {
+          const value = lang[feature];
+          let displayValue = value !== undefined ? value : 'N/A';
+          // 如果有codes描述，添加到显示中
+          if (value && walsCodesRef.current[value]) {
+            displayValue = `${value} (${walsCodesRef.current[value].name})`;
+          }
+          return `<span style='cursor:pointer;color:#4ecdc4;text-decoration:underline' data-feature='${feature}'>${feature}</span>: ${displayValue}<br/>`;
+        }).join('')
+      : '';
+    
     // 弹窗内容，特征名可点击
     const popupContent = `
       <b>${lang.Name || lang.Language_ID}</b><br/>
@@ -102,11 +209,26 @@ const MapView = () => {
       ${lang.region ? `Region: ${lang.region}<br/>` : 'Region: none<br/>'}
       ${lang.Macroarea ? `Macro Area: ${lang.Macroarea}<br/>` : 'Macro Area: none<br/>'}
       <hr style="margin: 5px 0; border: none; border-top: 1px solid #ccc;">
-
-      Size Value: ${sizeValue.toFixed(2)}<br/>
-      ${featureData.map(f =>
-        `<span style='cursor:pointer;color:#2c7c6c;text-decoration:underline' data-feature='${f.feature}'>${f.feature}</span>: ${lang[f.feature] !== undefined ? lang[f.feature] : 'N/A'}<br/>`
-      ).join('')}
+      
+      ${featureData.length > 0 ? '<b>GB Features:</b><br/>' : ''}
+      ${featureData.map(f => {
+        const value = lang[f.feature];
+        let displayValue = value !== undefined && value !== null ? value : 'N/A';
+        // GB特征值：0=absent, 1=present
+        if (value === 0 || value === '0') {
+          displayValue = '0 (absent)';
+        } else if (value === 1 || value === '1') {
+          displayValue = '1 (present)';
+        } else if (value !== 'N/A' && value !== undefined && value !== null && value !== '') {
+          displayValue = value; // 其他值直接显示
+        }
+        return `<span style='cursor:pointer;color:#2c7c6c;text-decoration:underline' data-feature='${f.feature}'>${f.feature}</span>: ${displayValue}<br/>`;
+      }).join('')}
+      
+      ${eaFeaturesHtml ? '<b>D-PLACE Features:</b><br/>' + eaFeaturesHtml : ''}
+      
+      ${walsFeaturesHtml ? '<b>WALS Features:</b><br/>' + walsFeaturesHtml : ''}
+      
       <hr style="margin: 5px 0; border: none; border-top: 1px solid #ccc;">
       <button id="explain-language-btn" style="
         background: #2c7c6c; 
@@ -125,14 +247,32 @@ const MapView = () => {
       // 单个特征时显示完整圆形
       const f = featureData[0];
       const color = getPetalColor(f.feature, f.value);
-      const strokeColor = f.value === null || f.value === undefined ? 'rgba(200, 200, 200, 0.3)' : '#fff';
-      const strokeWidth = f.value === null || f.value === undefined ? '0.5' : '0.5';
+      
+      // 确定边框颜色和宽度
+      let strokeColor = '#fff';
+      let strokeWidth = '0.5';
+      
+      if (f.value === null || f.value === undefined) {
+        strokeColor = 'rgba(200, 200, 200, 0.3)';
+        strokeWidth = '0.5';
+      }
       
       const highlightClass = isTreeHighlighted ? 'tree-highlighted' : (isDorecoHighlighted ? 'doreco-highlighted' : '');
+      
+      // 生成多层边框圆（每个匹配的分类特征一层）
+      const borderCircles = (matchedCategoricalFeatures && matchedCategoricalFeatures.length > 0)
+        ? matchedCategoricalFeatures.map((featureId, idx) => {
+            const borderColor = getFeatureColor(featureId);
+            const borderRadius = radius + 1.5 + (idx * 2); // 每层间隔2px
+            return `<circle cx="${svgSize/2}" cy="${svgSize/2}" r="${borderRadius}" fill="none" stroke="${borderColor}" stroke-width="2" opacity="0.8" />`;
+          }).join('')
+        : '';
+      
       const svg = `
         <svg width="${svgSize}" height="${svgSize}" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">
           <g class="${highlightClass}">
             <circle cx="${svgSize/2}" cy="${svgSize/2}" r="${radius}" fill="${color}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />
+            ${borderCircles}
           </g>
         </svg>
       `;
@@ -164,11 +304,16 @@ const MapView = () => {
                 evt.preventDefault();
                 if (fid && window.explainFeature) {
                   const featureInfo = featureDescriptions[fid];
+                  let database = 'Unknown';
+                  if (fid.startsWith('GB')) database = 'Grambank';
+                  else if (fid.startsWith('EA') || fid.includes('Richness')) database = 'D-PLACE';
+                  else database = 'WALS';
+                  
                   const feature = {
                     id: fid,
                     name: featureInfo?.name || fid,
                     description: featureInfo?.description || `Feature ${fid} from map view`,
-                    database: fid.startsWith('GB') ? 'Grambank' : 'D-PLACE',
+                    database: database,
                     type: 'map_feature'
                   };
                   window.explainFeature(feature);
@@ -225,9 +370,22 @@ const MapView = () => {
 
     // SVG 图标
     const highlightClass = isTreeHighlighted ? 'tree-highlighted' : (isDorecoHighlighted ? 'doreco-highlighted' : '');
+    
+    // 生成多层边框圆（每个匹配的分类特征一层）
+    const borderCircles = (matchedCategoricalFeatures && matchedCategoricalFeatures.length > 0)
+      ? matchedCategoricalFeatures.map((featureId, idx) => {
+          const borderColor = getFeatureColor(featureId);
+          const borderRadius = radius + 1.5 + (idx * 2); // 每层间隔2px
+          return `<circle cx="${svgSize/2}" cy="${svgSize/2}" r="${borderRadius}" fill="none" stroke="${borderColor}" stroke-width="2" opacity="0.8" />`;
+        }).join('')
+      : '';
+    
     const svg = `
       <svg width="${svgSize}" height="${svgSize}" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">
-        <g class="${highlightClass}">${paths.join('')}</g>
+        <g class="${highlightClass}">
+          ${paths.join('')}
+          ${borderCircles}
+        </g>
       </svg>
     `;
 
@@ -258,11 +416,16 @@ const MapView = () => {
               evt.preventDefault();
               if (fid && window.explainFeature) {
                 const featureInfo = featureDescriptions[fid];
+                let database = 'Unknown';
+                if (fid.startsWith('GB')) database = 'Grambank';
+                else if (fid.startsWith('EA') || fid.includes('Richness')) database = 'D-PLACE';
+                else database = 'WALS';
+                
                 const feature = {
                   id: fid,
                   name: featureInfo?.name || fid,
                   description: featureInfo?.description || `Feature ${fid} from map view`,
-                  database: fid.startsWith('GB') ? 'Grambank' : 'D-PLACE',
+                  database: database,
                   type: 'map_feature'
                 };
                 window.explainFeature(feature);
@@ -406,7 +569,7 @@ const MapView = () => {
         mapInstanceRef.current.off('zoomend', handleZoom);
       }
     };
-  }, [filteredLanguageData, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, highlightedLanguages, dorecoHighlightedLanguages]);
+  }, [filteredLanguageData, selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures, gbWeights, eaWeights, walsWeights, highlightedLanguages, dorecoHighlightedLanguages, categoricalFilters]);
 
   // 渲染标记的函数
   const renderMarkers = () => {
@@ -449,12 +612,6 @@ const MapView = () => {
           
           // 如果任何EA特征是NA，跳过这个语言点
           if (!allEaFeaturesValid) {
-            // 调试信息：显示被过滤掉的语言点
-            if (highlightedLanguages.includes(lang.Name)) {
-              console.log(`Filtered out ${lang.Name} - some EA features are NA:`, 
-                allEA.map(f => ({ feature: f, value: lang[f], isValid: lang[f] !== 'NA' && lang[f] !== null && lang[f] !== undefined && lang[f] !== '' }))
-              );
-            }
             filteredLanguages++;
             return; // 跳过，不显示圆圈
           }
@@ -472,16 +629,6 @@ const MapView = () => {
         });
         sizeValue = totalWeight > 0 ? sizeValue / totalWeight : 0;
 
-        // 调试信息：显示EA特征计算过程
-        if (allEA.length > 0 && highlightedLanguages.includes(lang.Name)) {
-          console.log(`EA Features calculation for ${lang.Name}:`, {
-            selectedEAFeatures: allEA,
-            eaWeights: eaWeights,
-            featureValues: allEA.map(f => ({ feature: f, value: lang[f], weight: eaWeights[f] || 1 })),
-            finalSizeValue: sizeValue
-          });
-        }
-
         // 构造饼图数据
         const featureData = allGB.map(feature => {
           const w = parseFloat(gbWeights[feature] || 1);
@@ -496,14 +643,23 @@ const MapView = () => {
         // 检查是否高亮
         const isTreeHighlighted = highlightedLanguages.includes(lang.Name);
         const isDorecoHighlighted = dorecoHighlightedLanguages.includes(lang.Name);
-        
-        // 调试信息
-        if (highlightedLanguages.length > 0 || dorecoHighlightedLanguages.length > 0) {
-          console.log('Checking highlight for:', lang.Name, 'Tree highlighted:', isTreeHighlighted, 'DoReCo highlighted:', isDorecoHighlighted);
+
+        // 检查是否匹配分类筛选
+        const matchedCategoricalFeatures = [];
+        if (categoricalFilters && Object.keys(categoricalFilters).length > 0) {
+          Object.entries(categoricalFilters).forEach(([featureId, selectedCategories]) => {
+            if (selectedCategories && selectedCategories.length > 0) {
+              const langValue = lang[featureId];
+              // 检查语言的特征值是否在选中的类别中
+              if (langValue && selectedCategories.includes(`${featureId}-${langValue}`)) {
+                matchedCategoricalFeatures.push(featureId);
+              }
+            }
+          });
         }
 
         // 创建标记
-        const marker = createMarker(lang, sizeValue, featureData, isTreeHighlighted, isDorecoHighlighted);
+        const marker = createMarker(lang, sizeValue, featureData, isTreeHighlighted, isDorecoHighlighted, matchedCategoricalFeatures);
         markersRef.current.push(marker);
         
         displayedLanguages++;
@@ -512,17 +668,12 @@ const MapView = () => {
         console.warn('Error creating marker for language:', lang.Name, error);
       }
     });
-
-    // 显示过滤统计信息
-    if (allEA.length > 0) {
-      console.log(`EA Features filtering: ${totalLanguages} total languages, ${filteredLanguages} filtered out (some NA), ${displayedLanguages} displayed`);
-    }
   };
 
   // 渲染标记
   useEffect(() => {
     renderMarkers();
-  }, [languageData, loading, selectedGBFeatures, selectedEAFeatures, gbWeights, eaWeights, showFeatureInfo, highlightedLanguages, dorecoHighlightedLanguages]);
+  }, [languageData, loading, selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures, gbWeights, eaWeights, walsWeights, showFeatureInfo, highlightedLanguages, dorecoHighlightedLanguages, categoricalFilters]);
 
   // 监听高亮语言变化，自动缩放到高亮区域
   useEffect(() => {

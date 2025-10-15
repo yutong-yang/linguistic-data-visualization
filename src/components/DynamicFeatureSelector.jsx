@@ -11,6 +11,8 @@ const DynamicFeatureSelector = () => {
     setSelectedGBFeatures, 
     selectedEAFeatures, 
     setSelectedEAFeatures,
+    selectedWALSFeatures,
+    setSelectedWALSFeatures,
     reloadData,
     loading,
     lang,
@@ -21,10 +23,13 @@ const DynamicFeatureSelector = () => {
 
   const [availableGbFeatures, setAvailableGbFeatures] = useState([]);
   const [availableEaFeatures, setAvailableEaFeatures] = useState([]);
+  const [availableWalsFeatures, setAvailableWalsFeatures] = useState([]);
   const [searchGb, setSearchGb] = useState('');
   const [searchEa, setSearchEa] = useState('');
+  const [searchWals, setSearchWals] = useState('');
   const [showGbSelector, setShowGbSelector] = useState(false);
   const [showEaSelector, setShowEaSelector] = useState(false);
+  const [showWalsSelector, setShowWalsSelector] = useState(false);
 
   // 语言配置
   const t = langs[lang];
@@ -78,8 +83,36 @@ const DynamicFeatureSelector = () => {
         }))
         .sort((a, b) => a.id.localeCompare(b.id));
 
+      // 加载WALS参数
+      const walsResponse = await fetch('/cldf-datasets-wals-014143f/cldf/parameters.csv');
+      const walsText = await walsResponse.text();
+      const walsData = d3.csvParse(walsText);
+      
+      const walsFeatures = walsData
+        .filter(row => row.ID && row.Name)
+        .map(row => ({
+          id: row.ID,
+          name: row.Name,
+          description: row.Description || '',
+          area: row.Area || ''
+        }))
+        .sort((a, b) => {
+          // 按照数字顺序排序 (1A, 2A, 3A... 10A, 11A...)
+          const numA = parseInt(a.id.match(/\d+/)?.[0] || 0);
+          const numB = parseInt(b.id.match(/\d+/)?.[0] || 0);
+          if (numA !== numB) return numA - numB;
+          // 如果数字相同，按字母排序
+          return a.id.localeCompare(b.id);
+        });
+
       setAvailableGbFeatures(gbFeatures);
       setAvailableEaFeatures(eaFeatures);
+      setAvailableWalsFeatures(walsFeatures);
+      
+        gb: gbFeatures.length,
+        ea: eaFeatures.length,
+        wals: walsFeatures.length
+      });
     } catch (error) {
       console.error('Error loading available features:', error);
     }
@@ -93,6 +126,12 @@ const DynamicFeatureSelector = () => {
   const filteredEaFeatures = availableEaFeatures.filter(feature =>
     feature.id.toLowerCase().includes(searchEa.toLowerCase()) ||
     feature.name.toLowerCase().includes(searchEa.toLowerCase())
+  );
+
+  const filteredWalsFeatures = availableWalsFeatures.filter(feature =>
+    feature.id.toLowerCase().includes(searchWals.toLowerCase()) ||
+    feature.name.toLowerCase().includes(searchWals.toLowerCase()) ||
+    (feature.area && feature.area.toLowerCase().includes(searchWals.toLowerCase()))
   );
 
   const toggleGbFeature = (featureId) => {
@@ -111,9 +150,18 @@ const DynamicFeatureSelector = () => {
     }
   };
 
+  const toggleWalsFeature = (featureId) => {
+    if (selectedWALSFeatures.includes(featureId)) {
+      setSelectedWALSFeatures(selectedWALSFeatures.filter(id => id !== featureId));
+    } else {
+      setSelectedWALSFeatures([...selectedWALSFeatures, featureId]);
+    }
+  };
+
   const clearAllFeatures = () => {
     setSelectedGBFeatures([]);
     setSelectedEAFeatures([]);
+    setSelectedWALSFeatures([]);
   };
 
   const selectAllGbFeatures = () => {
@@ -124,9 +172,13 @@ const DynamicFeatureSelector = () => {
     setSelectedEAFeatures(availableEaFeatures.map(f => f.id));
   };
 
+  const selectAllWalsFeatures = () => {
+    setSelectedWALSFeatures(availableWalsFeatures.map(f => f.id));
+  };
+
   // 下载数据功能
   const downloadData = () => {
-    if (!selectedGBFeatures.length && !selectedEAFeatures.length) {
+    if (!selectedGBFeatures.length && !selectedEAFeatures.length && !selectedWALSFeatures.length) {
       alert(t.selectAtLeastOneFeature || '请先选择至少一个特征');
       return;
     }
@@ -164,6 +216,11 @@ const DynamicFeatureSelector = () => {
           row[feature] = lang[feature] || 'NA';
         });
 
+        // 添加WALS特征
+        selectedWALSFeatures.forEach(feature => {
+          row[feature] = lang[feature] || 'NA';
+        });
+
         return row;
       });
 
@@ -180,7 +237,7 @@ const DynamicFeatureSelector = () => {
 
   // 下载特定格式
   const downloadSpecificFormat = (format) => {
-    if (!selectedGBFeatures.length && !selectedEAFeatures.length) {
+    if (!selectedGBFeatures.length && !selectedEAFeatures.length && !selectedWALSFeatures.length) {
       alert(t.selectAtLeastOneFeature || '请先选择至少一个特征');
       return;
     }
@@ -214,6 +271,11 @@ const DynamicFeatureSelector = () => {
 
         // 添加EA特征
         selectedEAFeatures.forEach(feature => {
+          row[feature] = lang[feature] || 'NA';
+        });
+
+        // 添加WALS特征
+        selectedWALSFeatures.forEach(feature => {
           row[feature] = lang[feature] || 'NA';
         });
 
@@ -315,10 +377,25 @@ const DynamicFeatureSelector = () => {
           >
             {t.selectAllEaFeatures}
           </button>
+          
+          <button
+            onClick={selectAllWalsFeatures}
+            style={{
+              padding: '4px 8px',
+              backgroundColor: '#2c7c6c',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '10px'
+            }}
+          >
+            All WALS
+          </button>
         </div>
         
         <div style={{ fontSize: '10px', color: '#666' }}>
-          {t.selectedFeaturesCount}: {selectedGBFeatures.length} {t.gbFeatures}, {selectedEAFeatures.length} {t.eaFeatures}
+          {t.selectedFeaturesCount}: {selectedGBFeatures.length} {t.gbFeatures}, {selectedEAFeatures.length} {t.eaFeatures}, {selectedWALSFeatures.length} WALS features
         </div>
       </div>
 
@@ -458,6 +535,84 @@ const DynamicFeatureSelector = () => {
                     type="checkbox"
                     checked={selectedEAFeatures.includes(feature.id)}
                     onChange={() => toggleEaFeature(feature.id)}
+                    style={{ marginRight: '6px' }}
+                  />
+                  <span>
+                    <strong>{feature.id}</strong>: {feature.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* WALS特征选择器 */}
+      <div style={{ marginBottom: '15px' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          marginBottom: '8px'
+        }}>
+          <span style={{ color: '#666', fontSize: '11px', fontWeight: 'bold' }}>WALS features</span>
+          <button
+            onClick={() => setShowWalsSelector(!showWalsSelector)}
+            style={{
+              padding: '3px 6px',
+              backgroundColor: '#2c7c6c',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '9px'
+            }}
+          >
+            {showWalsSelector ? t.hideSelector : t.showSelector}
+          </button>
+        </div>
+        
+        {showWalsSelector && (
+          <div>
+            <input
+              type="text"
+              placeholder="Search WALS features..."
+              value={searchWals}
+              onChange={(e) => setSearchWals(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px',
+                border: '1px solid #ddd',
+                borderRadius: '3px',
+                marginBottom: '8px',
+                fontSize: '10px'
+              }}
+            />
+            
+            <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
+              Found {filteredWalsFeatures.length} features
+            </div>
+            
+            <div style={{ 
+              maxHeight: '150px', 
+              overflowY: 'auto',
+              border: '1px solid #ddd',
+              borderRadius: '3px',
+              padding: '6px',
+              backgroundColor: '#fff'
+            }}>
+              {filteredWalsFeatures.map(feature => (
+                <label key={feature.id} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  marginBottom: '6px',
+                  cursor: 'pointer',
+                  fontSize: '10px'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedWALSFeatures.includes(feature.id)}
+                    onChange={() => toggleWalsFeature(feature.id)}
                     style={{ marginRight: '6px' }}
                   />
                   <span>

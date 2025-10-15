@@ -36,7 +36,6 @@ export const loadFamilyMapping = async () => {
       }
     }
     
-    console.log('语系映射加载成功:', Object.keys(familyMap).length, '个映射');
     return familyMap;
   } catch (error) {
     console.error('加载语系映射失败:', error);
@@ -76,7 +75,6 @@ export const loadGrambankFamilyMapping = async () => {
       }
     }
     
-    console.log('Grambank语系映射加载成功:', Object.keys(familyMap).length, '个映射');
     return familyMap;
   } catch (error) {
     console.error('加载Grambank语系映射失败:', error);
@@ -95,7 +93,6 @@ export const loadCombinedFamilyMapping = async () => {
     // 合并映射，Grambank的映射优先级更高
     const combinedMapping = { ...walsMapping, ...grambankMapping };
     
-    console.log('合并后的语系映射:', Object.keys(combinedMapping).length, '个映射');
     return combinedMapping;
   } catch (error) {
     console.error('加载合并语系映射失败:', error);

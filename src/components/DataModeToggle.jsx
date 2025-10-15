@@ -84,7 +84,6 @@ const DataModeToggle = () => {
       // 清理URL对象
       URL.revokeObjectURL(url);
       
-      console.log(t.downloadSuccess?.replace('{count}', downloadData.length) || `成功下载 ${downloadData.length} 行静态数据`);
     } catch (error) {
       console.error(t.downloadDataError || '下载静态数据时出错:', error);
       alert(t.downloadDataError || '下载数据时出错，请检查控制台');

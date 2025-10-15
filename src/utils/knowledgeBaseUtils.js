@@ -167,13 +167,11 @@ export async function healthCheck() {
  */
 export async function buildRAGContext(userQuery, maxResults = 10) {
   try {
-    console.log('构建简单RAG上下文，查询:', userQuery, '最大结果数:', maxResults);
     
     // 搜索相关知识 - 使用简单知识库，确保至少获取10个结果
     const searchResults = await searchKnowledgeBase(userQuery, Math.max(maxResults, 10));
     
     if (!searchResults.results || searchResults.results.length === 0) {
-      console.log('简单知识库中没有找到相关文档');
       return '';
     }
 
@@ -196,7 +194,6 @@ export async function buildRAGContext(userQuery, maxResults = 10) {
       context += '\n---\n';
     });
 
-    console.log('构建的简单RAG上下文长度:', context.length, '包含结果数:', searchResults.results.length);
     return context;
   } catch (error) {
     console.error('构建简单RAG上下文失败:', error);
@@ -231,18 +228,15 @@ export async function checkKnowledgeBaseStatus() {
  */
 export async function getSystemStatus() {
   try {
-    console.log('调用 getSystemStatus，API URL:', `${buildApiUrl(API_ENDPOINTS.knowledgeBase.status)}`);
     
     const response = await fetch(buildApiUrl(API_ENDPOINTS.knowledgeBase.status));
     
-    console.log('API 响应状态:', response.status, response.statusText);
     
     if (!response.ok) {
       throw new Error(`获取状态失败: ${response.statusText}`);
     }
     
     const data = await response.json();
-    console.log('API 返回数据:', data);
     
     return data;
   } catch (error) {
@@ -264,7 +258,6 @@ export async function getSystemStatus() {
  */
 export async function cancelCurrentTask() {
   try {
-    console.log('调用 cancelCurrentTask，API URL:', `${buildApiUrl(API_ENDPOINTS.knowledgeBase.cancelTask)}`);
     
     const response = await fetch(buildApiUrl(API_ENDPOINTS.knowledgeBase.cancelTask), {
       method: 'POST',
@@ -273,14 +266,12 @@ export async function cancelCurrentTask() {
       }
     });
     
-    console.log('API 响应状态:', response.status, response.statusText);
     
     if (!response.ok) {
       throw new Error(`取消任务失败: ${response.statusText}`);
     }
     
     const data = await response.json();
-    console.log('API 返回数据:', data);
     
     return data;
   } catch (error) {
@@ -296,18 +287,15 @@ export async function cancelCurrentTask() {
  */
 export async function getTaskStatus() {
   try {
-    console.log('调用 getTaskStatus，API URL:', `${buildApiUrl(API_ENDPOINTS.knowledgeBase.taskStatus)}`);
     
     const response = await fetch(buildApiUrl(API_ENDPOINTS.knowledgeBase.taskStatus));
     
-    console.log('API 响应状态:', response.status, response.statusText);
     
     if (!response.ok) {
       throw new Error(`获取任务状态失败: ${response.statusText}`);
     }
     
     const data = await response.json();
-    console.log('API 返回数据:', data);
     
     return data;
   } catch (error) {

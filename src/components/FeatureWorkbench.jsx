@@ -11,6 +11,8 @@ const FeatureWorkbench = () => {
     setSelectedGBFeatures, 
     selectedEAFeatures, 
     setSelectedEAFeatures,
+    selectedWALSFeatures,
+    setSelectedWALSFeatures,
     reloadData,
     loading,
     lang,
@@ -22,10 +24,13 @@ const FeatureWorkbench = () => {
   // Dynamic data mode states
   const [availableGbFeatures, setAvailableGbFeatures] = useState([]);
   const [availableEaFeatures, setAvailableEaFeatures] = useState([]);
+  const [availableWalsFeatures, setAvailableWalsFeatures] = useState([]);
   const [searchGb, setSearchGb] = useState('');
   const [searchEa, setSearchEa] = useState('');
+  const [searchWals, setSearchWals] = useState('');
   const [showGbSelector, setShowGbSelector] = useState(false);
   const [showEaSelector, setShowEaSelector] = useState(false);
+  const [showWalsSelector, setShowWalsSelector] = useState(false);
 
   const t = langs[lang];
 
@@ -66,8 +71,31 @@ const FeatureWorkbench = () => {
         }))
         .sort((a, b) => a.id.localeCompare(b.id));
 
+      // Load WALS parameters
+      const walsResponse = await fetch('/cldf-datasets-wals-014143f/cldf/parameters.csv');
+      const walsText = await walsResponse.text();
+      const walsData = d3.csvParse(walsText);
+      
+      const walsFeatures = walsData
+        .filter(row => row.ID && row.Name)
+        .map(row => ({
+          id: row.ID,
+          name: row.Name,
+          description: row.Description || '',
+          area: row.Area || ''
+        }))
+        .sort((a, b) => {
+          // 按照数字顺序排序 (1A, 2A, 3A... 10A, 11A...)
+          const numA = parseInt(a.id.match(/\d+/)?.[0] || 0);
+          const numB = parseInt(b.id.match(/\d+/)?.[0] || 0);
+          if (numA !== numB) return numA - numB;
+          // 如果数字相同，按字母排序
+          return a.id.localeCompare(b.id);
+        });
+
       setAvailableGbFeatures(gbFeatures);
       setAvailableEaFeatures(eaFeatures);
+      setAvailableWalsFeatures(walsFeatures);
     } catch (error) {
       console.error('Error loading available features:', error);
     }
@@ -81,6 +109,12 @@ const FeatureWorkbench = () => {
   const filteredEaFeatures = availableEaFeatures.filter(feature =>
     feature.id.toLowerCase().includes(searchEa.toLowerCase()) ||
     feature.name.toLowerCase().includes(searchEa.toLowerCase())
+  );
+
+  const filteredWalsFeatures = availableWalsFeatures.filter(feature =>
+    feature.id.toLowerCase().includes(searchWals.toLowerCase()) ||
+    feature.name.toLowerCase().includes(searchWals.toLowerCase()) ||
+    (feature.area && feature.area.toLowerCase().includes(searchWals.toLowerCase()))
   );
 
   const toggleGbFeature = (featureId) => {
@@ -99,9 +133,18 @@ const FeatureWorkbench = () => {
     }
   };
 
+  const toggleWalsFeature = (featureId) => {
+    if (selectedWALSFeatures.includes(featureId)) {
+      setSelectedWALSFeatures(selectedWALSFeatures.filter(id => id !== featureId));
+    } else {
+      setSelectedWALSFeatures([...selectedWALSFeatures, featureId]);
+    }
+  };
+
   const clearAllFeatures = () => {
     setSelectedGBFeatures([]);
     setSelectedEAFeatures([]);
+    setSelectedWALSFeatures([]);
   };
 
   const selectAllGbFeatures = () => {
@@ -110,6 +153,10 @@ const FeatureWorkbench = () => {
 
   const selectAllEaFeatures = () => {
     setSelectedEAFeatures(availableEaFeatures.map(f => f.id));
+  };
+
+  const selectAllWalsFeatures = () => {
+    setSelectedWALSFeatures(availableWalsFeatures.map(f => f.id));
   };
 
   // Dynamic feature selector component
@@ -181,10 +228,25 @@ const FeatureWorkbench = () => {
             >
               {t.selectAllEaFeatures || 'Select All EA'}
             </button>
+            
+            <button
+              onClick={selectAllWalsFeatures}
+              style={{
+                padding: '4px 8px',
+                backgroundColor: '#2c7c6c',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '10px'
+              }}
+            >
+              All WALS
+            </button>
           </div>
           
           <div style={{ fontSize: '10px', color: '#666' }}>
-            {t.selectedFeaturesCount || 'Selected'}: {selectedGBFeatures.length} {t.gbFeatures || 'GB'}, {selectedEAFeatures.length} {t.eaFeatures || 'EA'}
+            {t.selectedFeaturesCount || 'Selected'}: {selectedGBFeatures.length} {t.gbFeatures || 'GB features'}, {selectedEAFeatures.length} {t.eaFeatures || 'EA features'}, {selectedWALSFeatures.length} WALS features
           </div>
         </div>
 
@@ -324,6 +386,84 @@ const FeatureWorkbench = () => {
                       type="checkbox"
                       checked={selectedEAFeatures.includes(feature.id)}
                       onChange={() => toggleEaFeature(feature.id)}
+                      style={{ marginRight: '6px' }}
+                    />
+                    <span>
+                      <strong>{feature.id}</strong>: {feature.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* WALS feature selector */}
+        <div style={{ marginBottom: '15px' }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '8px'
+          }}>
+            <span style={{ color: '#666', fontSize: '11px', fontWeight: 'bold' }}>WALS features</span>
+            <button
+              onClick={() => setShowWalsSelector(!showWalsSelector)}
+              style={{
+                padding: '3px 6px',
+                backgroundColor: '#2c7c6c',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '9px'
+              }}
+            >
+              {showWalsSelector ? (t.hideSelector || 'Hide') : (t.showSelector || 'Show')}
+            </button>
+          </div>
+          
+          {showWalsSelector && (
+            <div>
+              <input
+                type="text"
+                placeholder="Search WALS features..."
+                value={searchWals}
+                onChange={(e) => setSearchWals(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px',
+                  border: '1px solid #ddd',
+                  borderRadius: '3px',
+                  marginBottom: '8px',
+                  fontSize: '10px'
+                }}
+              />
+              
+              <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
+                Found {filteredWalsFeatures.length} features
+              </div>
+              
+              <div style={{ 
+                maxHeight: '150px', 
+                overflowY: 'auto',
+                border: '1px solid #ddd',
+                borderRadius: '3px',
+                padding: '6px',
+                backgroundColor: '#fff'
+              }}>
+                {filteredWalsFeatures.map(feature => (
+                  <label key={feature.id} style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    marginBottom: '6px',
+                    cursor: 'pointer',
+                    fontSize: '10px'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedWALSFeatures.includes(feature.id)}
+                      onChange={() => toggleWalsFeature(feature.id)}
                       style={{ marginRight: '6px' }}
                     />
                     <span>

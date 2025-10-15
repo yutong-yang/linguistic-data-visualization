@@ -4,6 +4,7 @@ import FeatureWorkbench from './components/FeatureWorkbench';
 import CorrelationAnalysis from './components/CorrelationAnalysis';
 import PhyloTree from './components/PhyloTree';
 import LanguageFilter from './components/LanguageFilter';
+import CategoricalFeatureFilter from './components/CategoricalFeatureFilter';
 import ChatWidget from './components/ChatWidget';
 import FeatureInfoModal from './components/FeatureInfoModal';
 import ApiKeyModal from './components/ApiKeyModal';
@@ -22,7 +23,6 @@ function AppInner() {
   const { lang, setLang, languageFilter, setLanguageFilter } = useContext(DataContext);
 
   const handleApiKeySet = () => {
-    console.log('API Key has been set successfully');
   };
 
   // 获取上下文数据
@@ -113,12 +113,14 @@ function AppInner() {
             {/* 始终挂载组件，仅切换显示，防止状态丢失 */}
         <div className="tab-panel map-tab" style={{ display: activeTab === 'map' ? 'block' : 'none', position: 'relative', height: '100%' }}>
           {/* 筛选器行 */}
-          <div style={{ padding: 8, paddingBottom: 0, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1001, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(2px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            {/* 左侧：语言筛选器 */}
-            <LanguageFilter />
-            
-            {/* 右侧：家族筛选器 */}
-            <PhyloTree 
+          <div style={{ padding: 8, paddingBottom: 0, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1001, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(2px)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* 第一行：语言筛选器和家族筛选器 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {/* 左侧：语言筛选器 */}
+              <LanguageFilter />
+              
+              {/* 右侧：家族筛选器 */}
+              <PhyloTree 
               controlOnly 
               onLoad={(selectedTree) => {
                 setShowTreeOverlay(true);
@@ -132,6 +134,10 @@ function AppInner() {
                 }, 100);
               }} 
             />
+            </div>
+            
+            {/* 第二行：分类特征筛选器 */}
+            <CategoricalFeatureFilter />
           </div>
               {/* 地图容器 */}
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>

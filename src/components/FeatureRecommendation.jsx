@@ -83,19 +83,14 @@ const FeatureRecommendation = () => {
 
   // 添加特征到选择（避免重复）
   const addFeaturesToSelection = (features, type = 'gb') => {
-    console.log('Adding features:', features, 'type:', type);
-    console.log('Current selectedGBFeatures:', selectedGBFeatures);
-    console.log('Current selectedEAFeatures:', selectedEAFeatures);
     
     if (type === 'gb') {
       // 过滤掉已经存在的特征
       const newFeatures = features.filter(f => !selectedGBFeatures.includes(f));
       if (newFeatures.length === 0) {
-        console.log('所有GB特征都已存在');
         return;
       }
       const updatedFeatures = [...selectedGBFeatures, ...newFeatures];
-      console.log('New GB features:', updatedFeatures);
       setSelectedGBFeatures(updatedFeatures);
       
       // 显示成功消息
@@ -106,11 +101,9 @@ const FeatureRecommendation = () => {
       // 过滤掉已经存在的特征
       const newFeatures = features.filter(f => !selectedEAFeatures.includes(f));
       if (newFeatures.length === 0) {
-        console.log('所有EA特征都已存在');
         return;
       }
       const updatedFeatures = [...selectedEAFeatures, ...newFeatures];
-      console.log('New EA features:', updatedFeatures);
       setSelectedEAFeatures(updatedFeatures);
       
       // 显示成功消息
@@ -122,9 +115,6 @@ const FeatureRecommendation = () => {
 
   // AI解释特征功能
   const explainFeatureWithAI = (feature) => {
-    console.log('explainFeatureWithAI called with:', feature);
-    console.log('feature type:', typeof feature);
-    console.log('window.explainFeature exists:', !!window.explainFeature);
     
     if (!feature) {
       console.error('Feature is undefined or null');
@@ -327,9 +317,6 @@ const FeatureRecommendation = () => {
                 <div className="feature-actions">
                   <button
                     onClick={() => {
-                      console.log('AI button clicked for feature:', feature);
-                      console.log('feature.id:', feature.id);
-                      console.log('feature object:', feature);
                       explainFeatureWithAI(feature);
                     }}
                     className="ai-explain-btn"
@@ -421,18 +408,14 @@ const FeatureRecommendation = () => {
                         </button>
                         <button
                           onClick={() => {
-                            console.log('Feature clicked:', feature, 'isSelected:', isSelected);
                             if (isSelected) {
                               if (selectedGBFeatures.includes(feature)) {
-                                console.log('Removing from GB:', feature);
                                 setSelectedGBFeatures(selectedGBFeatures.filter(f => f !== feature));
                               } else {
-                                console.log('Removing from EA:', feature);
                                 setSelectedEAFeatures(selectedEAFeatures.filter(f => f !== feature));
                               }
                             } else {
                               const type = feature.startsWith('EA') || feature.includes('Richness') ? 'ea' : 'gb';
-                              console.log('Adding to', type, ':', feature);
                               addFeaturesToSelection([feature], type);
                             }
                           }}

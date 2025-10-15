@@ -203,8 +203,6 @@ export function getDescendantLanguages(node, languageMapping) {
           }
         }
         if (!found) {
-          console.log('No mapping found for glottocode:', glottocode);
-          console.log('Available codes in mapping:', Object.values(languageMapping).slice(0, 10));
         }
       }
     } else {
@@ -214,7 +212,6 @@ export function getDescendantLanguages(node, languageMapping) {
   }
   
   traverse(node);
-  console.log('Found languages for node:', languages);
   return languages;
 }
 

@@ -1077,7 +1077,6 @@ Use markdown formatting for better readability.`;
   const handleSourceLinkClick = (sourcePath) => {
     if (sourcePath.startsWith('source://')) {
       const actualPath = sourcePath.replace('source://', '');
-      console.log('点击了来源链接:', actualPath);
       
       // 这里可以添加更多功能，比如：
       // 1. 打开文件预览

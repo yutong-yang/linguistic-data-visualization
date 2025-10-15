@@ -17,7 +17,6 @@ async function callFeatureRecommendationAPI(prompt) {
     
     const API_URL = window.CONFIG?.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
     
-    console.log('Making feature recommendation API request to:', API_URL);
     
     const response = await fetch(`${API_URL}?key=${API_KEY}`, {
       method: 'POST',
@@ -107,15 +106,12 @@ function validateFeatures(features, languageData, featureDescriptions) {
 // 使用LLM探索完整数据库并推荐特征
 export async function recommendFeatures(userQuery, languageData, featureDescriptions) {
   try {
-    console.log('开始探索完整数据库进行特征推荐...');
     
     // 1. 获取数据库统计信息
     const stats = await getFeatureStatistics();
-    console.log('数据库统计:', stats);
     
     // 2. 搜索相关特征描述
     const searchResults = await searchFeatureDescriptions(userQuery, 30);
-    console.log('搜索到的相关特征:', searchResults.length);
     
     // 3. 获取当前数据中的特征
     const currentFeatures = getAllAvailableFeatures(languageData);
@@ -436,7 +432,6 @@ export function getFeatureDetails(featureId, featureDescriptions) {
 // 发现新特征 - 从完整数据库中查找用户可能感兴趣的特征
 export async function discoverNewFeatures(userQuery, limit = 10) {
   try {
-    console.log('开始发现新特征...');
     
     // 搜索相关特征
     const searchResults = await searchFeatureDescriptions(userQuery, limit);

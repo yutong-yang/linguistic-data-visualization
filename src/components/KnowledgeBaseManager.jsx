@@ -72,20 +72,16 @@ const KnowledgeBaseManager = () => {
 
   const checkStatus = async () => {
     try {
-      console.log('开始检查知识库状态...');
       
       // 获取系统状态
       const status = await getSystemStatus();
-      console.log('获取到的系统状态:', status);
       setSystemStatus(status);
       
       if (status.knowledge_base_initialized) {
-        console.log('知识库已初始化，状态设为 available');
         setStatus('available');
         // 获取详细知识库信息
         try {
           const info = await getKnowledgeBaseInfo();
-          console.log('获取到的知识库信息:', info);
           setKbInfo(info);
         } catch (error) {
           console.error('获取知识库信息失败:', error);
@@ -97,7 +93,6 @@ const KnowledgeBaseManager = () => {
           });
         }
       } else {
-        console.log('知识库未初始化，状态设为 unavailable');
         setStatus('unavailable');
         // 清空知识库信息
         setKbInfo(null);

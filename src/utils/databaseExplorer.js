@@ -15,7 +15,6 @@ export async function loadGrambankParameters() {
   try {
     // 使用正确的public目录路径
     const csvUrl = '/public/grambank-grambank-7ae000c/cldf/parameters.csv';
-    console.log('正在加载Grambank参数，URL:', csvUrl);
     
     const response = await fetch(csvUrl);
     
@@ -24,10 +23,8 @@ export async function loadGrambankParameters() {
     }
     
     const text = await response.text();
-    console.log('CSV文件加载成功，内容长度:', text.length);
     
     const data = d3.csvParse(text);
-    console.log('CSV解析成功，行数:', data.length);
     
     // 清理和格式化数据
     const parameters = data.map(row => ({
@@ -40,14 +37,11 @@ export async function loadGrambankParameters() {
     })).filter(row => row.id && row.name); // 过滤掉空行或无效行
     
     cachedParameters = parameters;
-    console.log(`Loaded ${parameters.length} Grambank parameters`);
     
     // 特别查找GB057来调试
     const gb057 = parameters.find(p => p.id === 'GB057');
     if (gb057) {
-      console.log('找到GB057:', gb057);
     } else {
-      console.log('未找到GB057，前5个参数:', parameters.slice(0, 5));
     }
     
     return parameters;
@@ -66,7 +60,6 @@ export async function loadDplaceVariables() {
   try {
     // 使用正确的public目录路径
     const csvUrl = '/public/dplace-cldf/cldf/variables.csv';
-    console.log('正在加载D-PLACE变量，URL:', csvUrl);
     
     const response = await fetch(csvUrl);
     
@@ -75,10 +68,8 @@ export async function loadDplaceVariables() {
     }
     
     const text = await response.text();
-    console.log('D-PLACE CSV文件加载成功，内容长度:', text.length);
     
     const data = d3.csvParse(text);
-    console.log('D-PLACE CSV解析成功，行数:', data.length);
     
     // 清理和格式化数据
     const variables = data.map(row => ({
@@ -90,8 +81,6 @@ export async function loadDplaceVariables() {
     }));
     
     cachedVariables = variables;
-    console.log(`Loaded ${variables.length} D-PLACE variables`);
-    console.log(variables);
     return variables;
   } catch (error) {
     console.error('Failed to load D-PLACE variables:', error);
@@ -123,7 +112,6 @@ export async function loadLanguages() {
     }));
     
     cachedLanguages = languages;
-    console.log(`Loaded ${languages.length} languages`);
     return languages;
   } catch (error) {
     console.error('Failed to load languages:', error);
@@ -164,12 +152,10 @@ export async function searchFeatureDescriptions(query, limit = 20) {
     }
   }
   
-  console.log('原始查询:', query, '扩展查询:', expandedQuery);
   
   try {
     // 搜索Grambank参数
     const parameters = await loadGrambankParameters();
-    console.log('搜索参数:', query, '在', parameters.length, '个参数中');
     
     const gbMatches = parameters.filter(param => {
       // 精确匹配ID优先
@@ -197,9 +183,7 @@ export async function searchFeatureDescriptions(query, limit = 20) {
       return originalMatch || expandedMatch;
     }).slice(0, limit);
     
-    console.log('Grambank匹配结果:', gbMatches.length);
     if (gbMatches.length > 0) {
-      console.log('前3个匹配:', gbMatches.slice(0, 3));
     }
     
     results.push(...gbMatches.map(param => ({
@@ -330,12 +314,6 @@ export async function getAllFeatureIds() {
         ...dplaceFeatures.map(f => f.id).filter(id => id)
       ]
     };
-    
-    console.log('所有真实特征编号:', {
-      grambank: allIds.grambank.length,
-      dplace: allIds.dplace.length,
-      total: allIds.all.length
-    });
     
     return allIds;
   } catch (error) {

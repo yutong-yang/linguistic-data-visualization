@@ -16,8 +16,10 @@ export const DataProvider = ({ children }) => {
   const [featureDescriptions, setFeatureDescriptions] = useState({});
   const [selectedGBFeatures, setSelectedGBFeatures] = useState([...gbFeatures, ...gbOrangeFeatures]); // 默认全选
   const [selectedEAFeatures, setSelectedEAFeatures] = useState([]);
+  const [selectedWALSFeatures, setSelectedWALSFeatures] = useState([]); // WALS特征选择
   const [gbWeights, setGbWeights] = useState({});
   const [eaWeights, setEaWeights] = useState({});
+  const [walsWeights, setWalsWeights] = useState({}); // WALS特征权重
   const [loading, setLoading] = useState(true);
   const [lang, setLang] = useState('en');
   const [useDynamicData, setUseDynamicData] = useState(false); // 是否使用动态数据
@@ -37,6 +39,9 @@ export const DataProvider = ({ children }) => {
   // doreco筛选高亮状态
   const [dorecoHighlightedLanguages, setDorecoHighlightedLanguages] = useState([]);
   
+  // 分类特征筛选状态: { featureId: [categoryId1, categoryId2, ...] }
+  const [categoricalFilters, setCategoricalFilters] = useState({});
+  
   // 特征筛选模式：'intersection' = 交集（必须拥有所有特征）, 'union' = 并集（拥有任意特征）
   const [featureFilterMode, setFeatureFilterMode] = useState('intersection');
 
@@ -50,7 +55,6 @@ export const DataProvider = ({ children }) => {
     if (!languageFilter || languageFilter.length === 0) {
       // 没有筛选，使用所有数据
       setFilteredLanguageData(languageData);
-      console.log('Language filter: Using all languages', languageData.length);
     } else {
       // 应用筛选
       const filtered = languageData.filter(lang => {
@@ -58,38 +62,6 @@ export const DataProvider = ({ children }) => {
         return glottocode && languageFilter.includes(glottocode);
       });
       setFilteredLanguageData(filtered);
-      
-      // 打印详细的筛选结果
-      console.log('=== Language Filter Results ===');
-      console.log('Total languages in dataset:', languageData.length);
-      console.log('Filter criteria (DoReCo glottocodes):', languageFilter.length);
-      console.log('Languages found in dataset:', filtered.length);
-      
-      // 找出匹配和不匹配的语言
-      const matchedLanguages = [];
-      const unmatchedGlottocodes = [];
-      
-      languageFilter.forEach(dorecoGlottocode => {
-        const found = languageData.find(lang => {
-          const glottocode = lang.Glottocode || lang.glottocode || lang.Language_ID;
-          return glottocode === dorecoGlottocode;
-        });
-        
-        if (found) {
-          matchedLanguages.push({
-            name: found.Name || found.name,
-            glottocode: dorecoGlottocode,
-            family: found.Family_level_ID || found.family
-          });
-        } else {
-          unmatchedGlottocodes.push(dorecoGlottocode);
-        }
-      });
-      
-      console.log('=== Matched Languages ===');
-      console.log('Found in dataset:', matchedLanguages);
-      console.log('=== Unmatched DoReCo Glottocodes ===');
-      console.log('Not found in dataset:', unmatchedGlottocodes);
     }
   }, [languageData, languageFilter]);
 
@@ -123,8 +95,7 @@ export const DataProvider = ({ children }) => {
   const loadDynamicData = async () => {
     setLoading(true);
     try {
-      console.log('Loading dynamic data with filter mode:', featureFilterMode);
-      const dynamicData = await buildDynamicData(selectedGBFeatures, selectedEAFeatures, featureFilterMode);
+      const dynamicData = await buildDynamicData(selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures, featureFilterMode);
       
       // 构建语言名称到Glottocode的映射
       const nameToCodeMapping = {};
@@ -136,7 +107,6 @@ export const DataProvider = ({ children }) => {
       
       setLanguageData(dynamicData);
       setLanguageMapping(nameToCodeMapping);
-      console.log('Dynamic data loaded:', dynamicData.length, 'language points');
     } catch (error) {
       console.error('Error loading dynamic data:', error);
       setLanguageData([]);
@@ -179,7 +149,6 @@ export const DataProvider = ({ children }) => {
           }
         });
         
-        console.log('Loaded language names from both sources:', Object.keys(languageNames).length);
       } catch (error) {
         console.warn('Could not load language names, using Language_ID as fallback');
       }
@@ -210,7 +179,6 @@ export const DataProvider = ({ children }) => {
       
       setLanguageData(data);
       setLanguageMapping(nameToCodeMapping);
-      console.log('Static data loaded:', data.length, 'language points');
     } catch (error) {
       setLanguageData([]);
       setLanguageMapping({});
@@ -233,7 +201,7 @@ export const DataProvider = ({ children }) => {
     if (useDynamicData) {
       loadDynamicData();
     }
-  }, [selectedGBFeatures, selectedEAFeatures, useDynamicData, featureFilterMode]);
+  }, [selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures, useDynamicData, featureFilterMode]);
 
   // 加载特征描述
   useEffect(() => {
@@ -263,17 +231,39 @@ export const DataProvider = ({ children }) => {
           const eaText = await eaResponse.text();
           const eaData = d3.csvParse(eaText);
           eaData.forEach(row => {
-            if (row.ID && row.Name && row.Description) {
+            if (row.ID && row.Name) {
               if (!desc[row.ID]) {
                 desc[row.ID] = {
                   name: row.Name,
-                  description: row.Description
+                  description: row.Description || '',
+                  type: row.type || 'Unknown',
+                  category: row.category || '',
+                  unit: row.unit || ''
                 };
               }
             }
           });
+          
+          // WALS
+          const walsResponse = await fetch('/cldf-datasets-wals-014143f/cldf/parameters.csv');
+          const walsText = await walsResponse.text();
+          const walsData = d3.csvParse(walsText);
+          walsData.forEach(row => {
+            if (row.ID && row.Name) {
+              if (!desc[row.ID]) {
+                desc[row.ID] = {
+                  name: row.Name,
+                  description: row.Description || row.Name,
+                  area: row.Area,
+                  chapter: row.Chapter
+                };
+              }
+            }
+          });
+          
           setFeatureDescriptions(desc);
         } catch (error) {
+          console.error('Failed to load feature descriptions:', error);
           setFeatureDescriptions({});
         }
       }
@@ -325,10 +315,14 @@ export const DataProvider = ({ children }) => {
     setSelectedGBFeatures,
     selectedEAFeatures,
     setSelectedEAFeatures,
+    selectedWALSFeatures,
+    setSelectedWALSFeatures,
     gbWeights,
     setGbWeights,
     eaWeights,
     setEaWeights,
+    walsWeights,
+    setWalsWeights,
     loading,
     lang,
     setLang,
@@ -346,7 +340,9 @@ export const DataProvider = ({ children }) => {
     featureFilterMode,
     setFeatureFilterMode,
     dorecoHighlightedLanguages,
-    setDorecoHighlightedLanguages
+    setDorecoHighlightedLanguages,
+    categoricalFilters,
+    setCategoricalFilters
   };
 
   return (

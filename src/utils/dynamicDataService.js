@@ -8,6 +8,10 @@ let cachedGbValues = null;
 let cachedEaValues = null;
 let cachedGbParameters = null;
 let cachedEaVariables = null;
+let cachedWalsLanguages = null;
+let cachedWalsValues = null;
+let cachedWalsParameters = null;
+let cachedWalsCodes = null;
 
 // 加载Grambank语言数据库
 async function loadGrambankLanguages() {
@@ -29,7 +33,6 @@ async function loadGrambankLanguages() {
     })).filter(lang => lang.glottocode && lang.latitude && lang.longitude);
     
     cachedLanguages = languages;
-    console.log(`Loaded ${languages.length} Grambank languages`);
     return languages;
   } catch (error) {
     console.error('Failed to load Grambank languages:', error);
@@ -56,13 +59,7 @@ async function loadDplaceSocieties() {
       type: row.type
     })).filter(soc => soc.glottocode && soc.latitude && soc.longitude);
     
-    // 调试信息：显示society ID和Glottocode映射
-    console.log('Sample societies with Glottocodes:', 
-      societies.slice(0, 5).map(soc => `${soc.id} -> ${soc.glottocode} (${soc.name})`)
-    );
-    
     cachedSocieties = societies;
-    console.log(`Loaded ${societies.length} D-PLACE societies`);
     return societies;
   } catch (error) {
     console.error('Failed to load D-PLACE societies:', error);
@@ -91,7 +88,6 @@ async function loadGrambankValues() {
     });
     
     cachedGbValues = valuesIndex;
-    console.log(`Loaded Grambank values for ${Object.keys(valuesIndex).length} languages`);
     return valuesIndex;
   } catch (error) {
     console.error('Failed to load Grambank values:', error);
@@ -104,42 +100,16 @@ async function loadDplaceValues() {
   if (cachedEaValues) return cachedEaValues;
   
   try {
-    console.log('=== 开始加载D-PLACE数据 ===');
-    
-    // 只加载data.csv
+    // 加载data.csv
     const dataResponse = await fetch('/dplace-cldf/cldf/data.csv');
-    
-    console.log('CSV文件响应状态:', {
-      data: dataResponse.status
-    });
-    
     const dataText = await dataResponse.text();
-    
-    console.log('CSV文件大小:', {
-      data: dataText.length
-    });
-    
     const data = d3.csvParse(dataText);
-    
-    console.log('解析后的数据行数:', {
-      data: data.length
-    });
-    
-    // 检查第一行数据
-    if (data.length > 0) {
-      console.log('第一行data.csv数据:', data[0]);
-      console.log('data.csv字段名:', Object.keys(data[0]));
-    }
     
     // 构建特征值索引：{ society_id: { variable: value } }
     const valuesIndex = {};
-    console.log('开始处理数据行...');
     
     data.forEach((row, index) => {
-      // 每1000行打印一次进度
-      if (index % 1000 === 0) {
-        console.log(`处理第 ${index} 行数据...`);
-      }
+      // 性能优化：移除进度日志
       
       if (row.Society_ID && row.Var_ID && (row.Value !== undefined && row.Value !== '' || row.Code_ID)) {
         if (!valuesIndex[row.Society_ID]) {
@@ -157,49 +127,13 @@ async function loadDplaceValues() {
           featureValue = row.Value;
         }
 
-        // 只在处理前100行时打印详细调试信息
-        if (index < 100) {
-          console.log(`行 ${index}: ${row.Society_ID} -> ${row.Var_ID} = ${featureValue}`);
-        }
-        
         if (featureValue !== undefined) {
           valuesIndex[row.Society_ID][row.Var_ID] = featureValue;
-        }
-      } else {
-        // 只在处理前100行时显示不符合条件的数据
-        if (index < 100) {
-          console.log(`行 ${index} 不符合条件:`, {
-            Society_ID: row.Society_ID,
-            Var_ID: row.Var_ID,
-            Value: row.Value,
-            Code_ID: row.Code_ID
-          });
         }
       }
     });
     
-    // 调试信息
-    console.log('D-PLACE data sample:', data.slice(0, 5));
-    console.log('Values index sample:', Object.keys(valuesIndex).slice(0, 5));
-    console.log('Sample society values:', valuesIndex[Object.keys(valuesIndex)[0]]);
-    
-    // 检查特定society的数据
-    const testSocietyId = 'B72'; // !Kung
-    if (valuesIndex[testSocietyId]) {
-      console.log(`Test society ${testSocietyId} values:`, valuesIndex[testSocietyId]);
-    } else {
-      console.log(`Test society ${testSocietyId} not found in valuesIndex`);
-    }
-    
-    // 检查原始数据中是否有这个society
-    const testSocietyData = data.filter(row => row.Society_ID === testSocietyId);
-    console.log(`Test society ${testSocietyId} raw data rows:`, testSocietyData.length);
-    if (testSocietyData.length > 0) {
-      console.log(`Sample raw data for ${testSocietyId}:`, testSocietyData[0]);
-    }
-    
     cachedEaValues = valuesIndex;
-    console.log(`Loaded D-PLACE values for ${Object.keys(valuesIndex).length} societies`);
     return valuesIndex;
   } catch (error) {
     console.error('Failed to load D-PLACE values:', error);
@@ -223,7 +157,6 @@ async function loadGrambankParameters() {
     }));
     
     cachedGbParameters = parameters;
-    console.log(`Loaded ${parameters.length} Grambank parameters`);
     return parameters;
   } catch (error) {
     console.error('Failed to load Grambank parameters:', error);
@@ -250,7 +183,6 @@ async function loadEaVariables() {
     }));
     
     cachedEaVariables = variables;
-    console.log(`Loaded ${variables.length} D-PLACE variables`);
     return variables;
   } catch (error) {
     console.error('Failed to load D-PLACE variables:', error);
@@ -258,19 +190,144 @@ async function loadEaVariables() {
   }
 }
 
+// 加载WALS语言数据库
+async function loadWalsLanguages() {
+  if (cachedWalsLanguages) return cachedWalsLanguages;
+  
+  try {
+    const response = await fetch('/cldf-datasets-wals-014143f/cldf/languages.csv');
+    const text = await response.text();
+    const data = d3.csvParse(text);
+    
+    const languages = data.map(row => ({
+      id: row.ID,
+      name: row.Name,
+      glottocode: row.Glottocode,
+      family: row.Family,
+      macroarea: row.Macroarea,
+      latitude: parseFloat(row.Latitude) || 0,
+      longitude: parseFloat(row.Longitude) || 0
+    })).filter(lang => lang.latitude && lang.longitude);
+    
+    cachedWalsLanguages = languages;
+    return languages;
+  } catch (error) {
+    console.error('Failed to load WALS languages:', error);
+    return [];
+  }
+}
+
+// 加载WALS特征值数据库
+async function loadWalsValues() {
+  if (cachedWalsValues) return cachedWalsValues;
+  
+  try {
+    const response = await fetch('/cldf-datasets-wals-014143f/cldf/values.csv');
+    const text = await response.text();
+    const data = d3.csvParse(text);
+    
+    // 构建特征值索引：{ language_id: { parameter: value } }
+    const valuesIndex = {};
+    data.forEach(row => {
+      if (row.Language_ID && row.Parameter_ID && row.Value !== undefined && row.Value !== '' && row.Value !== 'NA') {
+        if (!valuesIndex[row.Language_ID]) {
+          valuesIndex[row.Language_ID] = {};
+        }
+        // 存储Code_ID作为值
+        valuesIndex[row.Language_ID][row.Parameter_ID] = row.Code_ID || row.Value;
+      }
+    });
+    
+    cachedWalsValues = valuesIndex;
+    return valuesIndex;
+  } catch (error) {
+    console.error('Failed to load WALS values:', error);
+    return {};
+  }
+}
+
+// 加载WALS特征参数数据库
+async function loadWalsParameters() {
+  if (cachedWalsParameters) return cachedWalsParameters;
+  
+  try {
+    const response = await fetch('/cldf-datasets-wals-014143f/cldf/parameters.csv');
+    const text = await response.text();
+    const data = d3.csvParse(text);
+    
+    const parameters = {};
+    data.forEach(row => {
+      if (row.ID) {
+        parameters[row.ID] = {
+          id: row.ID,
+          name: row.Name,
+          description: row.Description || row.Name,
+          area: row.Area,
+          chapter: row.Chapter
+        };
+      }
+    });
+    
+    cachedWalsParameters = parameters;
+    return parameters;
+  } catch (error) {
+    console.error('Failed to load WALS parameters:', error);
+    return {};
+  }
+}
+
+// 加载WALS特征值代码（codes.csv）
+async function loadWalsCodes() {
+  if (cachedWalsCodes) return cachedWalsCodes;
+  
+  try {
+    const response = await fetch('/cldf-datasets-wals-014143f/cldf/codes.csv');
+    const text = await response.text();
+    const data = d3.csvParse(text);
+    
+    // 构建代码索引：{ code_id: { name, description } }
+    const codes = {};
+    data.forEach(row => {
+      if (row.ID) {
+        codes[row.ID] = {
+          id: row.ID,
+          parameterId: row.Parameter_ID,
+          name: row.Name,
+          description: row.Description || row.Name,
+          number: row.Number
+        };
+      }
+    });
+    
+    cachedWalsCodes = codes;
+    return codes;
+  } catch (error) {
+    console.error('Failed to load WALS codes:', error);
+    return {};
+  }
+}
+
+// 导出获取WALS代码描述的函数
+export async function getWalsCodeDescription(codeId) {
+  const codes = await loadWalsCodes();
+  return codes[codeId] || null;
+}
+
 // 动态构建数据
-export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, filterMode = 'intersection') {
-  console.log('Building dynamic data for features:', { selectedGbFeatures, selectedEaFeatures, filterMode });
+export async function buildDynamicData(selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures = [], filterMode = 'intersection') {
   
   try {
     // 并行加载所有必要的数据
-    const [languages, societies, gbValues, eaValues, gbParams, eaVars] = await Promise.all([
+    const [languages, societies, walsLanguages, gbValues, eaValues, walsValues, gbParams, eaVars, walsParams] = await Promise.all([
       loadGrambankLanguages(),
       loadDplaceSocieties(),
+      loadWalsLanguages(),
       loadGrambankValues(),
       loadDplaceValues(),
+      loadWalsValues(),
       loadGrambankParameters(),
-      loadEaVariables()
+      loadEaVariables(),
+      loadWalsParameters()
     ]);
     
     // 构建语言到社会的映射
@@ -284,12 +341,20 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
       }
     });
 
-    // 调试信息：显示映射情况
-    console.log('Language to societies mapping sample:', 
-      Object.entries(languageToSocieties).slice(0, 3).map(([glotto, socs]) => 
-        `${glotto}: ${socs.length} societies (${socs.map(s => s.id).join(', ')})`
-      )
-    );
+    // 构建WALS语言ID到Grambank glottocode的映射
+    const walsIdToGlottocode = {};
+    const glottocodeToWalsId = {};
+    walsLanguages.forEach(lang => {
+      if (lang.id) {
+        walsIdToGlottocode[lang.id] = lang.glottocode;
+        if (lang.glottocode) {
+          if (!glottocodeToWalsId[lang.glottocode]) {
+            glottocodeToWalsId[lang.glottocode] = [];
+          }
+          glottocodeToWalsId[lang.glottocode].push(lang.id);
+        }
+      }
+    });
     
     // 构建结果数据
     const resultData = [];
@@ -307,19 +372,77 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
       
       // 检查是否有选中的GB特征
       let hasSelectedGbFeatures = false;
-      if (selectedGbFeatures.length > 0) {
+      if (selectedGBFeatures.length > 0) {
         if (filterMode === 'intersection') {
           // 交集模式：必须拥有所有特征
-          hasSelectedGbFeatures = selectedGbFeatures.every(feature => {
+          hasSelectedGbFeatures = selectedGBFeatures.every(feature => {
             const value = langGbValues[feature];
             return value !== undefined && value !== 'NA' && value !== null && value !== '';
           });
         } else {
           // 并集模式：拥有任意一个特征即可
-          hasSelectedGbFeatures = selectedGbFeatures.some(feature => {
+          hasSelectedGbFeatures = selectedGBFeatures.some(feature => {
             const value = langGbValues[feature];
             return value !== undefined && value !== 'NA' && value !== null && value !== '';
           });
+        }
+      }
+      
+      // 检查是否有选中的WALS特征
+      let hasSelectedWalsFeatures = false;
+      let walsFeatureValues = {};
+      const langWalsIds = glottocodeToWalsId[lang.glottocode] || [];
+      
+      if (selectedWALSFeatures.length > 0 && langWalsIds.length > 0) {
+        if (filterMode === 'intersection') {
+          // 交集模式：必须拥有所有WALS特征
+          const allWalsFeaturesValid = selectedWALSFeatures.every(feature => {
+            // 检查是否有任何WALS语言ID有这个特征的数据
+            return langWalsIds.some(walsId => {
+              const langWalsValues = walsValues[walsId] || {};
+              const value = langWalsValues[feature];
+              return value !== undefined && value !== 'NA' && value !== null && value !== '';
+            });
+          });
+          
+          if (allWalsFeaturesValid) {
+            hasSelectedWalsFeatures = true;
+            // 收集所有WALS特征值（从第一个有数据的WALS语言获取）
+            selectedWALSFeatures.forEach(feature => {
+              for (const walsId of langWalsIds) {
+                const langWalsValues = walsValues[walsId] || {};
+                const value = langWalsValues[feature];
+                if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+                  walsFeatureValues[feature] = value;
+                  break;
+                }
+              }
+            });
+          }
+        } else {
+          // 并集模式：拥有任意一个WALS特征即可
+          const hasAnyWalsFeatures = selectedWALSFeatures.some(feature => {
+            return langWalsIds.some(walsId => {
+              const langWalsValues = walsValues[walsId] || {};
+              const value = langWalsValues[feature];
+              return value !== undefined && value !== 'NA' && value !== null && value !== '';
+            });
+          });
+          
+          if (hasAnyWalsFeatures) {
+            hasSelectedWalsFeatures = true;
+            // 收集所有可用的WALS特征值
+            selectedWALSFeatures.forEach(feature => {
+              for (const walsId of langWalsIds) {
+                const langWalsValues = walsValues[walsId] || {};
+                const value = langWalsValues[feature];
+                if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+                  walsFeatureValues[feature] = value;
+                  break;
+                }
+              }
+            });
+          }
         }
       }
       
@@ -327,14 +450,10 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
       let hasSelectedEaFeatures = false;
       let eaFeatureValues = {};
       
-      if (langSocieties.length > 0) {
-        console.log(`Language ${lang.glottocode} has ${langSocieties.length} societies:`, 
-          langSocieties.map(s => `${s.id} (${s.name})`)
-        );
-        
+      if (selectedEAFeatures.length > 0 && langSocieties.length > 0) {
         if (filterMode === 'intersection') {
           // 交集模式：检查所有EA特征是否都有有效数据
-          const allEaFeaturesValid = selectedEaFeatures.every(feature => {
+          const allEaFeaturesValid = selectedEAFeatures.every(feature => {
             // 检查是否有任何society有这个特征的数据，且值不是NA
             return langSocieties.some(soc => {
               const socEaValues = eaValues[soc.id] || {};
@@ -347,33 +466,22 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
             hasSelectedEaFeatures = true;
             
             // 收集所有EA特征值（从第一个有数据的society获取）
-            selectedEaFeatures.forEach(feature => {
+            selectedEAFeatures.forEach(feature => {
               for (const soc of langSocieties) {
                 const socEaValues = eaValues[soc.id] || {};
                 const value = socEaValues[feature];
                 if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
                   eaFeatureValues[feature] = value;
-                  console.log(`Found EA feature ${feature} = ${value} for society ${soc.id}`);
                   break; // 找到第一个有效值就停止
                 }
               }
             });
           } else {
-            // 调试信息：显示缺失的EA特征
-            console.log(`Language ${lang.glottocode} missing some EA features:`, 
-              selectedEaFeatures.map(feature => {
-                const hasFeature = langSocieties.some(soc => {
-                  const socEaValues = eaValues[soc.id] || {};
-                  return socEaValues[feature] !== undefined;
-                });
-                return { feature, hasData: hasFeature };
-              })
-            );
             filteredLanguages++;
           }
         } else {
           // 并集模式：检查是否有任意EA特征有有效数据
-          const hasAnyEaFeatures = selectedEaFeatures.some(feature => {
+          const hasAnyEaFeatures = selectedEAFeatures.some(feature => {
             return langSocieties.some(soc => {
               const socEaValues = eaValues[soc.id] || {};
               const value = socEaValues[feature];
@@ -385,78 +493,41 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
             hasSelectedEaFeatures = true;
             
             // 收集所有可用的EA特征值（从第一个有数据的society获取）
-            selectedEaFeatures.forEach(feature => {
+            selectedEAFeatures.forEach(feature => {
               for (const soc of langSocieties) {
                 const socEaValues = eaValues[soc.id] || {};
                 const value = socEaValues[feature];
                 if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
                   eaFeatureValues[feature] = value;
-                  console.log(`Found EA feature ${feature} = ${value} for society ${soc.id}`);
                   break; // 找到第一个有效值就停止
                 }
               }
             });
           } else {
-            console.log(`Language ${lang.glottocode} has no EA features data`);
             filteredLanguages++;
           }
         }
-      } else {
-        console.log(`No societies found for language ${lang.glottocode}`);
-        if (selectedEaFeatures.length > 0) {
-          filteredLanguages++;
-        }
+      } else if (selectedEAFeatures.length > 0) {
+        // 没有societies但选择了EA特征
+        hasSelectedEaFeatures = false; // 没有数据，设为false
+        filteredLanguages++;
       }
       
       // 检查GB特征缺失的情况
-      if (selectedGbFeatures.length > 0 && !hasSelectedGbFeatures) {
-        console.log(`Language ${lang.glottocode} missing some GB features:`, 
-          selectedGbFeatures.map(feature => ({
-            feature, 
-            hasData: langGbValues[feature] !== undefined
-          }))
-        );
+      if (selectedGBFeatures.length > 0 && !hasSelectedGbFeatures) {
         filteredLanguages++;
       }
       
       // 只有当语言有相关特征时才添加到结果中
       if (filterMode === 'intersection') {
-        // 交集模式：GB和EA特征都需要满足各自的条件
-        if (selectedEaFeatures.length > 0) {
-          // 有EA特征时，必须所有EA特征都有数据
-          if (hasSelectedEaFeatures) {
-            const dataPoint = {
-              Language_ID: lang.glottocode,
-              Name: lang.name,
-              Latitude: lang.latitude,
-              Longitude: lang.longitude,
-              Family_level_ID: lang.family,
-              Macroarea: lang.macroarea,
-              region: langSocieties[0]?.region || '',
-              Soc_ID: langSocieties[0]?.id || ''
-            };
-            
-            // 添加GB特征值
-            selectedGbFeatures.forEach(feature => {
-              const value = langGbValues[feature];
-              if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
-                dataPoint[feature] = value;
-              }
-            });
-            
-            // 添加EA特征值
-            selectedEaFeatures.forEach(feature => {
-              const value = eaFeatureValues[feature];
-              if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
-                dataPoint[feature] = value;
-              }
-            });
-            
-            resultData.push(dataPoint);
-            displayedLanguages++;
-          }
-        } else if (hasSelectedGbFeatures) {
-          // 没有EA特征时，只检查GB特征
+        // 交集模式：只检查被选中的数据集
+        // 如果选了GB特征，必须满足GB条件；如果选了EA特征，必须满足EA条件；WALS同理
+        const gbCondition = selectedGBFeatures.length === 0 || hasSelectedGbFeatures;
+        const eaCondition = selectedEAFeatures.length === 0 || hasSelectedEaFeatures;
+        const walsCondition = selectedWALSFeatures.length === 0 || hasSelectedWalsFeatures;
+        const shouldInclude = gbCondition && eaCondition && walsCondition;
+        
+        if (shouldInclude) {
           const dataPoint = {
             Language_ID: lang.glottocode,
             Name: lang.name,
@@ -469,8 +540,24 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
           };
           
           // 添加GB特征值
-          selectedGbFeatures.forEach(feature => {
+          selectedGBFeatures.forEach(feature => {
             const value = langGbValues[feature];
+            if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+              dataPoint[feature] = value;
+            }
+          });
+          
+          // 添加EA特征值
+          selectedEAFeatures.forEach(feature => {
+            const value = eaFeatureValues[feature];
+            if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+              dataPoint[feature] = value;
+            }
+          });
+          
+          // 添加WALS特征值
+          selectedWALSFeatures.forEach(feature => {
+            const value = walsFeatureValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
             }
@@ -480,8 +567,8 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
           displayedLanguages++;
         }
       } else {
-        // 并集模式：GB和EA特征之间也是取并集
-        if (hasSelectedGbFeatures || hasSelectedEaFeatures) {
+        // 并集模式：GB、EA和WALS特征之间取并集
+        if (hasSelectedGbFeatures || hasSelectedEaFeatures || hasSelectedWalsFeatures) {
           const dataPoint = {
             Language_ID: lang.glottocode,
             Name: lang.name,
@@ -494,7 +581,7 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
           };
           
           // 添加GB特征值（如果有的话）
-          selectedGbFeatures.forEach(feature => {
+          selectedGBFeatures.forEach(feature => {
             const value = langGbValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
@@ -502,8 +589,16 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
           });
           
           // 添加EA特征值（如果有的话）
-          selectedEaFeatures.forEach(feature => {
+          selectedEAFeatures.forEach(feature => {
             const value = eaFeatureValues[feature];
+            if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
+              dataPoint[feature] = value;
+            }
+          });
+          
+          // 添加WALS特征值（如果有的话）
+          selectedWALSFeatures.forEach(feature => {
+            const value = walsFeatureValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
             }
@@ -515,18 +610,6 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
       }
     });
     
-    // 显示过滤统计信息
-    if (selectedEaFeatures.length > 0 || selectedGbFeatures.length > 0) {
-      console.log(`Dynamic data filtering (${filterMode} mode): ${totalLanguages} total languages, ${filteredLanguages} filtered out (missing features), ${displayedLanguages} displayed`);
-      if (selectedGbFeatures.length > 0) {
-        console.log(`GB features ${filterMode === 'intersection' ? 'required' : 'available'}: ${selectedGbFeatures.join(', ')}`);
-      }
-      if (selectedEaFeatures.length > 0) {
-        console.log(`EA features ${filterMode === 'intersection' ? 'required' : 'available'}: ${selectedEaFeatures.join(', ')}`);
-      }
-    }
-    
-    console.log(`Built dynamic data with ${resultData.length} language points`);
     return resultData;
     
   } catch (error) {
@@ -537,9 +620,10 @@ export async function buildDynamicData(selectedGbFeatures, selectedEaFeatures, f
 
 // 获取特征描述
 export async function getFeatureDescriptions() {
-  const [gbParams, eaVars] = await Promise.all([
+  const [gbParams, eaVars, walsParams] = await Promise.all([
     loadGrambankParameters(),
-    loadEaVariables()
+    loadEaVariables(),
+    loadWalsParameters()
   ]);
   
   const descriptions = {};
@@ -554,7 +638,19 @@ export async function getFeatureDescriptions() {
   eaVars.forEach(variable => {
     descriptions[variable.id] = {
       name: variable.name,
-      description: variable.description
+      description: variable.description,
+      type: variable.type,
+      category: variable.category,
+      unit: variable.unit
+    };
+  });
+  
+  Object.values(walsParams).forEach(param => {
+    descriptions[param.id] = {
+      name: param.name,
+      description: param.description,
+      area: param.area,
+      chapter: param.chapter
     };
   });
   
@@ -569,4 +665,8 @@ export function clearCache() {
   cachedEaValues = null;
   cachedGbParameters = null;
   cachedEaVariables = null;
+  cachedWalsLanguages = null;
+  cachedWalsValues = null;
+  cachedWalsParameters = null;
+  cachedWalsCodes = null;
 }

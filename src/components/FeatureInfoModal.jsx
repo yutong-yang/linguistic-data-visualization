@@ -152,17 +152,48 @@ const FeatureInfoModal = () => {
         `;
       }
     }
+    // 检查是否是WALS特征
     else {
-      info = `
-        <div class="feature-info-section">
-          <h4>Feature ID</h4>
-          <p><strong>${feature}</strong></p>
-        </div>
-        <div class="feature-info-section">
-          <h4>Description</h4>
-          <p>This is an unknown feature type. Detailed description not available.</p>
-        </div>
-      `;
+      const walsInfo = featureDescriptions[feature];
+      if (walsInfo) {
+        info = `
+          <div class="feature-info-section">
+            <h4>Name</h4>
+            <p><strong>${walsInfo.name}</strong></p>
+          </div>
+          <div class="feature-info-section">
+            <h4>Description</h4>
+            <div class="description-content">${formatDescription(walsInfo.description)}</div>
+          </div>
+          ${walsInfo.area ? `
+          <div class="feature-info-section">
+            <h4>Area</h4>
+            <p>${walsInfo.area}</p>
+          </div>
+          ` : ''}
+          ${walsInfo.chapter ? `
+          <div class="feature-info-section">
+            <h4>Chapter</h4>
+            <p>${walsInfo.chapter}</p>
+          </div>
+          ` : ''}
+          <div class="feature-info-section">
+            <h4>Feature Type</h4>
+            <p>WALS Feature</p>
+          </div>
+        `;
+      } else {
+        info = `
+          <div class="feature-info-section">
+            <h4>Feature ID</h4>
+            <p><strong>${feature}</strong></p>
+          </div>
+          <div class="feature-info-section">
+            <h4>Description</h4>
+            <p>This is an unknown feature type. Detailed description not available.</p>
+          </div>
+        `;
+      }
     }
     
     return info;

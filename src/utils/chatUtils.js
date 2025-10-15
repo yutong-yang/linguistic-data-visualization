@@ -73,7 +73,6 @@ export async function callGeminiAPI(userMessage, lang = 'en') {
       try {
         const { searchFeatureDescriptions, cleanDescription } = await import('./databaseExplorer.js');
         const featureId = featureMatch[0].toUpperCase();
-        console.log('正在查找特征:', featureId);
         
         // 搜索特征信息
         const searchResults = await searchFeatureDescriptions(featureId, 10);
@@ -81,9 +80,7 @@ export async function callGeminiAPI(userMessage, lang = 'en') {
         
         if (exactMatch) {
           specificFeatureInfo = `\n=== 数据库中的特征信息 ===\n${featureId}: ${exactMatch.name}\n分类: ${exactMatch.category}\n描述: ${exactMatch.description}\n来源: ${exactMatch.source}`;
-          console.log('找到特征信息:', exactMatch);
         } else {
-          console.log('未找到特征:', featureId, '搜索结果:', searchResults);
         }
       } catch (error) {
         console.warn('特征搜索失败:', error);
@@ -124,7 +121,6 @@ export async function callGeminiAPI(userMessage, lang = 'en') {
     if (isRecommendationQuery) {
       try {
         const { searchFeatureDescriptions, getAllFeatureIds, cleanDescription } = await import('./databaseExplorer.js');
-        console.log('执行特征推荐搜索...');
         
         // 获取所有真实存在的特征编号
         const allIds = await getAllFeatureIds();
@@ -132,7 +128,6 @@ export async function callGeminiAPI(userMessage, lang = 'en') {
         
         // 从用户消息中提取关键词进行搜索 - 使用与左侧特征推荐相同的方法
         const searchResults = await searchFeatureDescriptions(userMessage, 15);
-        console.log('搜索到的相关特征:', searchResults.length);
         
         if (searchResults.length > 0) {
           relatedFeatures = `\n=== 相关特征推荐（直接来自数据库CSV文件）===\n${searchResults.slice(0, 10).map(feature => 
@@ -147,7 +142,6 @@ export async function callGeminiAPI(userMessage, lang = 'en') {
     // 搜索后端知识库
     let knowledgeContext = '';
     try {
-      console.log('正在搜索后端知识库...');
       const { searchKnowledgeBase } = await import('./knowledgeBaseUtils.js');
       // 增加搜索结果数量，让AI获得更全面的信息
       const searchResults = await searchKnowledgeBase(userMessage, 10);
@@ -162,14 +156,11 @@ export async function callGeminiAPI(userMessage, lang = 'en') {
           knowledgeContext = `\n=== 知识库搜索结果 ===\n${relevantResults.map((result, index) => 
             `文档 ${index + 1}:\n标题: ${result.metadata?.title || result.metadata?.filename || '未知'}\n来源: ${result.metadata?.source || '未知'}\n内容片段: ${result.content?.substring(0, 300) || '无内容'}...`
           ).join('\n\n')}`;
-          console.log('知识库搜索成功，找到', relevantResults.length, '个相关结果');
         } else {
           knowledgeContext = '\n=== 知识库搜索无相关结果 ===\n注意：虽然找到了一些文档片段，但相关性较低，可能无法准确回答您的问题。';
-          console.log('知识库搜索结果相关性较低');
         }
       } else {
         knowledgeContext = '\n=== 知识库搜索无结果 ===\n注意：在知识库中没有找到与您问题相关的内容。';
-        console.log('知识库搜索无结果');
       }
     } catch (error) {
       console.warn('知识库搜索失败:', error);
@@ -186,7 +177,6 @@ export async function callGeminiAPI(userMessage, lang = 'en') {
     }
     
     const isChinese = lang === 'zh';
-    console.log('callGeminiAPI语言设置:', lang, '是否中文:', isChinese);
     
     // 获取聊天历史并构建上下文
     const recentHistory = chatHistory.slice(-5); // 获取最近5轮对话
@@ -308,8 +298,6 @@ Answer:
 
 要求：回答简洁明了，重点突出，使用【】或[]标记重点，JSON数据直接放在最后，不要使用HTML标签。`
 
-    console.log('Making API request to:', API_URL);
-    console.log('API Key:', API_KEY.substring(0, 10) + '...');
     
     const response = await fetch(`${API_URL}?key=${API_KEY}`, {
       method: 'POST',
@@ -325,8 +313,6 @@ Answer:
       })
     });
 
-    console.log('Response status:', response.status);
-    console.log('Response headers:', response.headers);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -335,7 +321,6 @@ Answer:
     }
 
     const data = await response.json();
-    console.log('API Response data:', data);
     
     if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
       return data.candidates[0].content.parts[0].text;

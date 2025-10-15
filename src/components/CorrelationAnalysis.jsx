@@ -9,11 +9,14 @@ const CorrelationAnalysis = () => {
     filteredLanguageData,
     selectedGBFeatures,
     selectedEAFeatures,
+    selectedWALSFeatures,
     gbWeights,
     eaWeights,
+    walsWeights,
     lang,
     langs,
-    featureFilterMode
+    featureFilterMode,
+    featureDescriptions
   } = useContext(DataContext);
 
   const [correlationResults, setCorrelationResults] = useState(null);
@@ -254,6 +257,27 @@ const CorrelationAnalysis = () => {
     return null;
   };
 
+  // 解析WALS值 - 从格式如"1A-2"中提取数字部分
+  const parseWALSValue = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    
+    // 如果已经是数字，直接返回
+    if (typeof value === 'number') return value;
+    
+    // 转换为字符串
+    const strValue = String(value);
+    
+    // 尝试提取格式如"1A-2"、"2A-3"中的最后一个数字
+    const match = strValue.match(/-(\d+)$/);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    
+    // 如果没有连字符，尝试直接解析整个字符串
+    const parsed = parseFloat(strValue);
+    return isNaN(parsed) ? null : parsed;
+  };
+
 
 
   // 计算组间相关性 - 修复加权计算问题
@@ -281,14 +305,10 @@ const CorrelationAnalysis = () => {
       }
     };
 
-    console.log('Group definitions:', groupDefs);
-    console.log('Selected features:', selectedFeatures);
-
     // 计算每组的加权平均 - 修复权重获取和组内权重归一化
     const groupValues = {};
     Object.entries(groupDefs).forEach(([key, group]) => {
       if (group.features.length > 0) {
-        console.log(`Processing group ${key}:`, group.features);
         groupValues[key] = data.map(lang => {
           let totalValue = 0;
           let totalWeight = 0;
@@ -320,18 +340,8 @@ const CorrelationAnalysis = () => {
           // 组内权重归一化 - 这是关键修复
           return totalWeight > 0 ? totalValue / totalWeight : null;
         });
-        
-        // 过滤掉null值并显示统计信息
-        const validValues = groupValues[key].filter(v => v !== null);
-        console.log(`Group ${key} valid values:`, validValues.length, 'out of', groupValues[key].length);
-        if (validValues.length > 0) {
-          console.log(`Group ${key} sample values:`, validValues.slice(0, 5));
-          console.log(`Group ${key} value range:`, Math.min(...validValues), 'to', Math.max(...validValues));
-        }
       }
     });
-
-    console.log('Group values:', groupValues);
 
     // 计算组间相关性
     const groupKeys = Object.keys(groupValues);
@@ -354,20 +364,8 @@ const CorrelationAnalysis = () => {
           const filteredValues1 = validIndices.map(i => groupValues[group1][i]);
           const filteredValues2 = validIndices.map(i => groupValues[group2][i]);
           
-          console.log(`Correlation ${group1} vs ${group2}:`, {
-            values1Length: filteredValues1.length,
-            values2Length: filteredValues2.length,
-            sampleValues1: filteredValues1.slice(0, 3),
-            sampleValues2: filteredValues2.slice(0, 3)
-          });
-          
           if (filteredValues1.length > 0 && filteredValues2.length > 0) {
             const result = methodFunc(filteredValues1, filteredValues2);
-            console.log(`Correlation result for ${group1} vs ${group2}:`, {
-              r: result.r,
-              p: result.p,
-              significance: getSignificance(result.p)
-            });
             correlations[group1][group2] = result;
           } else {
             correlations[group1][group2] = {r: 0, p: 1};
@@ -385,7 +383,7 @@ const CorrelationAnalysis = () => {
     setIsCalculating(true);
     
     // 合并所有选中的特征
-    const allFeatures = [...selectedGBFeatures, ...selectedEAFeatures];
+    const allFeatures = [...selectedGBFeatures, ...selectedEAFeatures, ...(selectedWALSFeatures || [])];
     
     if (allFeatures.length < 2) {
       setCorrelationResults(null);
@@ -394,7 +392,7 @@ const CorrelationAnalysis = () => {
       setIsCalculating(false);
       return;
     }
-
+    
     // 过滤有效数据 - 根据筛选模式处理
     const validData = filteredLanguageData.filter(lang => {
       if (featureFilterMode === 'intersection') {
@@ -404,20 +402,26 @@ const CorrelationAnalysis = () => {
           if (feature.startsWith('GB')) {
             // GB特征：只有0、1、null三种值
             return value === '0' || value === 0 || value === '1' || value === 1;
+          } else if (feature.match(/^\d+[A-Z]$/)) {
+            // WALS特征：可以是任何非空值
+            return value !== null && value !== undefined && value !== '';
           } else {
-            // EA特征：需要是有效数值
+            // EA/D-PLACE特征：需要是有效数值
             return value !== null && value !== undefined && value !== '' && !isNaN(value);
           }
         });
       } else {
-        // 并集模式：GB和EA特征之间也是取并集，拥有任意一个特征的数据即可
+        // 并集模式：拥有任意一个特征的数据即可
         return allFeatures.some(feature => {
           const value = lang[feature];
           if (feature.startsWith('GB')) {
             // GB特征：只有0、1、null三种值
             return value === '0' || value === 0 || value === '1' || value === 1;
+          } else if (feature.match(/^\d+[A-Z]$/)) {
+            // WALS特征：可以是任何非空值
+            return value !== null && value !== undefined && value !== '';
           } else {
-            // EA特征：需要是有效数值
+            // EA/D-PLACE特征：需要是有效数值
             return value !== null && value !== undefined && value !== '' && !isNaN(value);
           }
         });
@@ -425,6 +429,7 @@ const CorrelationAnalysis = () => {
     });
 
     if (validData.length < 10) {
+      alert(`Not enough data for correlation analysis. Found ${validData.length} languages with valid data, but need at least 10.`);
       setCorrelationResults(null);
       setGroupCorrelationResults(null);
       setGroupedCorrelationResults(null);
@@ -445,11 +450,14 @@ const CorrelationAnalysis = () => {
           correlations[feature1][feature2] = 1;
           pValues[feature1][feature2] = 0;
         } else {
-          // 修复特征值获取 - 正确处理GB特征
+          // 修复特征值获取 - 正确处理GB、WALS特征
           const values1 = validData.map(d => {
             let value = d[feature1];
             if (feature1.startsWith('GB')) {
               value = parseGBValue(value);
+            } else if (feature1.match(/^\d+[A-Z]$/)) {
+              // WALS特征格式：1A, 2A等
+              value = parseWALSValue(value);
             } else {
               value = parseFloat(value);
             }
@@ -459,6 +467,9 @@ const CorrelationAnalysis = () => {
             let value = d[feature2];
             if (feature2.startsWith('GB')) {
               value = parseGBValue(value);
+            } else if (feature2.match(/^\d+[A-Z]$/)) {
+              // WALS特征格式：1A, 2A等
+              value = parseWALSValue(value);
             } else {
               value = parseFloat(value);
             }
@@ -467,17 +478,6 @@ const CorrelationAnalysis = () => {
           
           // 使用与组间相关性计算相同的方法
           const result = correlationMethods[correlationMethod].function(values1, values2);
-          
-          // 添加调试信息
-          if (feature1 === 'GB030' && feature2 === 'EA044') {
-            console.log('Feature correlation debug:', {
-              feature1,
-              feature2,
-              result,
-              values1Sample: values1.slice(0, 5),
-              values2Sample: values2.slice(0, 5)
-            });
-          }
           
           correlations[feature1][feature2] = result.r;
           pValues[feature1][feature2] = result.p;
@@ -629,6 +629,8 @@ const CorrelationAnalysis = () => {
               let value = d[feature1];
               if (feature1.startsWith('GB')) {
                 value = parseGBValue(value);
+              } else if (feature1.match(/^\d+[A-Z]$/)) {
+                value = parseWALSValue(value);
               } else {
                 value = parseFloat(value);
               }
@@ -639,6 +641,8 @@ const CorrelationAnalysis = () => {
               let value = d[feature2];
               if (feature2.startsWith('GB')) {
                 value = parseGBValue(value);
+              } else if (feature2.match(/^\d+[A-Z]$/)) {
+                value = parseWALSValue(value);
               } else {
                 value = parseFloat(value);
               }
@@ -880,7 +884,7 @@ const CorrelationAnalysis = () => {
         
         <button
           onClick={calculateCorrelations}
-          disabled={isCalculating || selectedGBFeatures.length + selectedEAFeatures.length < 2}
+          disabled={isCalculating || selectedGBFeatures.length + selectedEAFeatures.length + (selectedWALSFeatures || []).length < 2}
           style={{
             width: '100%',
             padding: '8px',
@@ -895,6 +899,128 @@ const CorrelationAnalysis = () => {
           {isCalculating ? (t.calculating || 'Calculating...') : (t.calculateCorrelations || 'Calculate Correlations')}
         </button>
       </div>
+
+      {/* 显示所选特征列表及简介 */}
+      {(selectedGBFeatures.length > 0 || selectedEAFeatures.length > 0 || (selectedWALSFeatures || []).length > 0) && (
+        <div style={{
+          marginTop: '15px',
+          padding: '12px',
+          background: '#f8f9fa',
+          borderRadius: '4px',
+          border: '1px solid #dee2e6'
+        }}>
+          <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#495057' }}>
+            {lang === 'zh' ? '已选择的特征' : 'Selected Features'} ({selectedGBFeatures.length + selectedEAFeatures.length + (selectedWALSFeatures || []).length})
+          </h4>
+          
+          {/* Grambank 特征 */}
+          {selectedGBFeatures.length > 0 && (
+            <div style={{ marginBottom: '12px' }}>
+              <h5 style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#2c7c6c', fontWeight: 'bold' }}>
+                Grambank ({selectedGBFeatures.length})
+              </h5>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                {selectedGBFeatures.map(feature => {
+                  const desc = featureDescriptions[feature];
+                  return (
+                    <div key={feature} style={{
+                      padding: '6px 8px',
+                      background: 'white',
+                      borderRadius: '3px',
+                      border: '1px solid #dee2e6',
+                      fontSize: '11px'
+                    }}>
+                      <strong style={{ color: '#2c7c6c' }}>{feature}</strong>
+                      {desc && (
+                        <div style={{ marginTop: '2px', color: '#666' }}>
+                          {desc.name || desc.description || (lang === 'zh' ? '无描述' : 'No description')}
+                        </div>
+                      )}
+                      {!desc && (
+                        <div style={{ marginTop: '2px', color: '#999', fontSize: '10px' }}>
+                          {lang === 'zh' ? '无描述' : 'No description'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* D-PLACE 特征 */}
+          {selectedEAFeatures.length > 0 && (
+            <div style={{ marginBottom: '12px' }}>
+              <h5 style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#ff6b35', fontWeight: 'bold' }}>
+                D-PLACE ({selectedEAFeatures.length})
+              </h5>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                {selectedEAFeatures.map(feature => {
+                  const desc = featureDescriptions[feature];
+                  return (
+                    <div key={feature} style={{
+                      padding: '6px 8px',
+                      background: 'white',
+                      borderRadius: '3px',
+                      border: '1px solid #dee2e6',
+                      fontSize: '11px'
+                    }}>
+                      <strong style={{ color: '#ff6b35' }}>{feature}</strong>
+                      {desc && (
+                        <div style={{ marginTop: '2px', color: '#666' }}>
+                          {desc.name || desc.description || (lang === 'zh' ? '无描述' : 'No description')}
+                          {desc.type && <span style={{ marginLeft: '6px', color: '#999', fontSize: '10px' }}>[{desc.type}]</span>}
+                        </div>
+                      )}
+                      {!desc && (
+                        <div style={{ marginTop: '2px', color: '#999', fontSize: '10px' }}>
+                          {lang === 'zh' ? '无描述' : 'No description'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* WALS 特征 */}
+          {(selectedWALSFeatures || []).length > 0 && (
+            <div style={{ marginBottom: '0' }}>
+              <h5 style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#6f42c1', fontWeight: 'bold' }}>
+                WALS ({(selectedWALSFeatures || []).length})
+              </h5>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                {(selectedWALSFeatures || []).map(feature => {
+                  const desc = featureDescriptions[feature];
+                  return (
+                    <div key={feature} style={{
+                      padding: '6px 8px',
+                      background: 'white',
+                      borderRadius: '3px',
+                      border: '1px solid #dee2e6',
+                      fontSize: '11px'
+                    }}>
+                      <strong style={{ color: '#6f42c1' }}>{feature}</strong>
+                      {desc && (
+                        <div style={{ marginTop: '2px', color: '#666' }}>
+                          {desc.name || desc.description || (lang === 'zh' ? '无描述' : 'No description')}
+                          {desc.area && <span style={{ marginLeft: '6px', color: '#999', fontSize: '10px' }}>[{desc.area}]</span>}
+                        </div>
+                      )}
+                      {!desc && (
+                        <div style={{ marginTop: '2px', color: '#999', fontSize: '10px' }}>
+                          {lang === 'zh' ? '无描述' : 'No description'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 组间相关性结果 */}
       {groupCorrelationResults && (

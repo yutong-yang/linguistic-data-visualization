@@ -13,9 +13,6 @@ const PhyloTree = ({ selectedTreeProp, autoLoad = false, controlOnly = false, on
 
   // 处理树节点点击
   const handleNodeClick = (node, descendantLanguages) => {
-    console.log('Node clicked:', node.data.name);
-    console.log('Descendant languages found:', descendantLanguages);
-    console.log('Current language mapping:', languageMapping);
     
     if (descendantLanguages.length > 0) {
       setTreeInfo(`
@@ -24,11 +21,9 @@ const PhyloTree = ({ selectedTreeProp, autoLoad = false, controlOnly = false, on
         <strong>Languages:</strong> ${descendantLanguages.join(', ')}
       `);
       setHighlightedLanguages(descendantLanguages);
-      console.log('Setting highlighted languages:', descendantLanguages);
     } else {
       setTreeInfo('No matching languages found for this node.');
       setHighlightedLanguages([]);
-      console.log('No languages found, clearing highlights');
     }
   };
 

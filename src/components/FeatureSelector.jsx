@@ -9,10 +9,14 @@ const FeatureSelector = () => {
     setSelectedGBFeatures,
     selectedEAFeatures,
     setSelectedEAFeatures,
+    selectedWALSFeatures,
+    setSelectedWALSFeatures,
     gbWeights,
     setGbWeights,
     eaWeights,
     setEaWeights,
+    walsWeights,
+    setWalsWeights,
     showFeatureInfo,
     lang,
     langs,
@@ -92,6 +96,35 @@ const FeatureSelector = () => {
       const newSelected = new Set(selectedEAFeatures);
       newSelected.delete(feature);
       setSelectedEAFeatures(Array.from(newSelected));
+    }
+  };
+
+  // 处理 WALS 特征选择
+  const handleWALSFeatureChange = (feature, checked) => {
+    const newSelected = new Set(selectedWALSFeatures);
+    if (checked) {
+      newSelected.add(feature);
+      setWalsWeights(prev => ({ ...prev, [feature]: prev[feature] || 1 }));
+    } else {
+      newSelected.delete(feature);
+      setWalsWeights(prev => ({ ...prev, [feature]: '' }));
+    }
+    setSelectedWALSFeatures(Array.from(newSelected));
+  };
+
+  // 处理 WALS 特征权重变化
+  const handleWALSWeightChange = (feature, weight) => {
+    const numWeight = parseFloat(weight);
+    setWalsWeights(prev => ({ ...prev, [feature]: weight }));
+
+    if (numWeight > 0) {
+      const newSelected = new Set(selectedWALSFeatures);
+      newSelected.add(feature);
+      setSelectedWALSFeatures(Array.from(newSelected));
+    } else {
+      const newSelected = new Set(selectedWALSFeatures);
+      newSelected.delete(feature);
+      setSelectedWALSFeatures(Array.from(newSelected));
     }
   };
 
@@ -327,7 +360,7 @@ const FeatureSelector = () => {
       
       {/* 添加状态显示 */}
       <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px', padding: '4px', background: '#f0f0f0', borderRadius: '4px' }}>
-        已选择: GB特征({selectedGBFeatures.length}) EA特征({selectedEAFeatures.length})
+        已选择: GB特征({selectedGBFeatures.length}) D-PLACE特征({selectedEAFeatures.length}) WALS特征({selectedWALSFeatures.length})
         {selectedGBFeatures.length > 0 && (
           <div style={{ marginTop: '4px', fontSize: '10px' }}>
             GB: {selectedGBFeatures.slice(0, 5).join(', ')}{selectedGBFeatures.length > 5 ? '...' : ''}
@@ -335,7 +368,12 @@ const FeatureSelector = () => {
         )}
         {selectedEAFeatures.length > 0 && (
           <div style={{ marginTop: '2px', fontSize: '10px' }}>
-            EA: {selectedEAFeatures.slice(0, 5).join(', ')}{selectedEAFeatures.length > 5 ? '...' : ''}
+            D-PLACE: {selectedEAFeatures.slice(0, 5).join(', ')}{selectedEAFeatures.length > 5 ? '...' : ''}
+          </div>
+        )}
+        {selectedWALSFeatures.length > 0 && (
+          <div style={{ marginTop: '2px', fontSize: '10px' }}>
+            WALS: {selectedWALSFeatures.slice(0, 5).join(', ')}{selectedWALSFeatures.length > 5 ? '...' : ''}
           </div>
         )}
       </div>
@@ -507,6 +545,45 @@ const FeatureSelector = () => {
                             const newSelected = selectedEAFeatures.filter(f => f !== feature);
                             setSelectedEAFeatures(newSelected);
                             setEaWeights(prev => ({ ...prev, [feature]: '' }));
+                          }}
+                          className="remove-feature-btn"
+                          title={langs[lang].removeFeature || '移除特征'}
+                        >
+                          ❌
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* WALS特征 */}
+            {selectedWALSFeatures.length > 0 && (
+              <div>
+                <h5>🟢 WALS Features ({selectedWALSFeatures.length})</h5>
+                <div className="features-grid">
+                  {selectedWALSFeatures.map(feature => (
+                    <div key={feature} className="feature-item">
+                      <div className="feature-info">
+                        <div className="feature-id">{feature}</div>
+                        <div className="feature-name">
+                          {featureDescriptions[feature]?.name || feature}
+                        </div>
+                      </div>
+                      <div className="feature-actions">
+                        <button
+                          onClick={() => explainFeatureWithAI(feature)}
+                          className="ai-explain-btn"
+                          title={langs[lang].aiExplanation || 'AI解释'}
+                        >
+                          🤖
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newSelected = selectedWALSFeatures.filter(f => f !== feature);
+                            setSelectedWALSFeatures(newSelected);
+                            setWalsWeights(prev => ({ ...prev, [feature]: '' }));
                           }}
                           className="remove-feature-btn"
                           title={langs[lang].removeFeature || '移除特征'}

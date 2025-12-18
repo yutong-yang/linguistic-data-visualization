@@ -1,53 +1,12 @@
-// 智能特征推荐系统 - 让LLM探索完整数据库
-import { searchKnowledgeBase } from './knowledgeBaseUtils.js';
+// 智能特征推荐系统 - 调用后端API
+import { buildApiUrl, API_ENDPOINTS } from '../config/api.js';
+import { getSelectedAPIProvider, getAPIKey } from './chatUtils.js';
+// 保留这些导入用于其他辅助函数（discoverNewFeatures, getDatabaseOverview）
 import { 
-  loadGrambankParameters, 
-  loadDplaceVariables, 
   searchFeatureDescriptions,
   getFeatureStatistics,
-  getFeaturesByCategory,
   cleanDescription
 } from './databaseExplorer.js';
-async function callFeatureRecommendationAPI(prompt) {
-  try {
-    const API_KEY = localStorage.getItem('GEMINI_API_KEY');
-    if (!API_KEY) {
-      throw new Error('API_KEY_NOT_SET');
-    }
-    
-    const API_URL = window.CONFIG?.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
-    
-    
-    const response = await fetch(`${API_URL}?key=${API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: prompt
-          }]
-        }]
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-      return data.candidates[0].content.parts[0].text;
-    } else {
-      throw new Error('Invalid API response format');
-    }
-  } catch (error) {
-    console.error('Feature recommendation API error:', error);
-    throw error;
-  }
-}
 
 // 获取所有可用特征
 function getAllAvailableFeatures(languageData) {
@@ -103,112 +62,56 @@ function validateFeatures(features, languageData, featureDescriptions) {
   return validFeatures;
 }
 
-// 使用LLM探索完整数据库并推荐特征
+// 使用后端API推荐特征
 export async function recommendFeatures(userQuery, languageData, featureDescriptions) {
   try {
+    // 获取当前选择的 API provider
+    const apiProvider = getSelectedAPIProvider() || 'gemini';
     
-    // 1. 获取数据库统计信息
-    const stats = await getFeatureStatistics();
+    // 获取对应的 API Key
+    const apiKey = getAPIKey(apiProvider);
+    if (!apiKey) {
+      const providerName = apiProvider === 'qianwen' ? 'QIANWEN' : 'GEMINI';
+      throw new Error(`${providerName}_API_KEY未设置`);
+    }
     
-    // 2. 搜索相关特征描述
-    const searchResults = await searchFeatureDescriptions(userQuery, 30);
-    
-    // 3. 获取当前数据中的特征
-    const currentFeatures = getAllAvailableFeatures(languageData);
-    
-    // 4. 构建数据样本
-    const dataSample = languageData.slice(0, 5).map(lang => {
-      const sampleFeatures = {};
-      currentFeatures.slice(0, 10).forEach(feature => {
-        if (lang[feature] !== null && lang[feature] !== undefined) {
-          sampleFeatures[feature] = lang[feature];
-        }
-      });
-      return {
-        name: lang.Name || lang.name,
-        family: lang.Family_level_ID || lang.family,
-        features: sampleFeatures
-      };
+    // 调用后端API
+    const response = await fetch(buildApiUrl(API_ENDPOINTS.featureRecommendation), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey
+      },
+      body: JSON.stringify({
+        user_query: userQuery,
+        language_data: languageData || [],
+        feature_descriptions: featureDescriptions || {},
+        n_kb_results: 10,
+        api_provider: apiProvider  // 传递 API provider 类型
+      })
     });
     
-    // 5. 构建LLM提示，包含完整的数据库信息
-    const prompt = `你是一位专业的语言学数据分析专家。现在你有机会探索完整的语言学数据库来为用户推荐最相关的特征。
-
-=== 用户问题 ===
-${userQuery}
-
-=== 完整数据库信息 ===
-Grambank数据库: ${stats?.totalGrambankFeatures || 0} 个语法特征
-D-PLACE数据库: ${stats?.totalDplaceFeatures || 0} 个社会文化特征
-
-=== 搜索到的相关特征 (${searchResults.length}个) ===
-${searchResults.map(feature => 
-  `${feature.id} (${feature.source}): ${feature.name}
-   分类: ${feature.category}
-   描述: ${cleanDescription(feature.description).substring(0, 150)}...`
-).join('\n\n')}
-
-=== 当前数据中的特征 (${currentFeatures.length}个) ===
-${currentFeatures.slice(0, 20).join(', ')}${currentFeatures.length > 20 ? '...' : ''}
-
-=== 数据样本 (5种语言) ===
-${dataSample.map(lang => 
-  `${lang.name} (${lang.family}): ${Object.entries(lang.features).map(([k, v]) => `${k}=${v}`).join(', ')}`
-).join('\n')}
-
-=== 任务 ===
-请分析用户问题，从完整数据库中推荐最相关的特征。你可以：
-1. 从搜索到的相关特征中选择
-2. 从当前数据中的特征中选择
-3. 推荐数据库中其他相关特征
-
-请按以下JSON格式返回推荐：
-
-{
-  "recommendations": [
-    {
-      "category": "特征分类名称",
-      "name": "推荐组名称", 
-      "description": "推荐理由",
-      "features": ["特征ID1", "特征ID2", "特征ID3"],
-      "reason": "为什么推荐这些特征",
-      "source": "Grambank/D-PLACE/Current Data"
-    }
-  ]
-}
-
-要求：
-1. 优先推荐搜索到的相关特征
-2. 确保推荐的特征在数据库中实际存在
-3. 考虑特征之间的关联性和互补性
-4. 提供清晰的推荐理由
-5. 标注特征来源（Grambank/D-PLACE/当前数据）`;
-
-    // 调用LLM获取推荐
-    const response = await callFeatureRecommendationAPI(prompt);
-    
-    // 解析LLM响应
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.recommendations) {
-          // 验证推荐的特征是否存在
-          parsed.recommendations.forEach(rec => {
-            rec.features = validateFeatures(rec.features, languageData, featureDescriptions);
-          });
-          return parsed.recommendations.filter(rec => rec.features.length > 0);
-        }
-      }
-    } catch (parseError) {
-      console.warn('LLM响应解析失败，使用备用方法:', parseError);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(errorData.detail || `API请求失败: ${response.status}`);
     }
     
-    // 如果LLM解析失败，使用备用方法
-    return await fallbackRecommendation(userQuery, languageData, featureDescriptions);
+    const data = await response.json();
+    
+    // 后端已经验证了特征，直接返回
+    if (data.recommendations && Array.isArray(data.recommendations)) {
+      // 再次验证特征（双重保险）
+      data.recommendations.forEach(rec => {
+        rec.features = validateFeatures(rec.features, languageData, featureDescriptions);
+      });
+      return data.recommendations.filter(rec => rec.features.length > 0);
+    }
+    
+    return [];
     
   } catch (error) {
-    console.error('LLM特征推荐失败:', error);
+    console.error('特征推荐失败:', error);
+    // 如果后端API失败，使用备用方法
     return await fallbackRecommendation(userQuery, languageData, featureDescriptions);
   }
 }
@@ -284,6 +187,45 @@ function extractFeaturesFromSearchResults(results) {
     const gbMatches = content.match(/gb\d{3}/gi);
     if (gbMatches) {
       gbMatches.forEach(match => features.add(match.toUpperCase()));
+    }
+    
+    // 提取EA特征
+    const eaMatches = content.match(/ea\d{3}/gi);
+    if (eaMatches) {
+      eaMatches.forEach(match => features.add(match.toUpperCase()));
+    }
+    
+    // 提取环境特征
+    if (content.includes('richness')) {
+      features.add('AmphibianRichness');
+      features.add('BirdRichness');
+      features.add('MammalRichness');
+      features.add('VascularPlantsRichness');
+    }
+  });
+  
+  return Array.from(features);
+}
+
+// 从知识库搜索结果中提取特征ID
+function extractFeaturesFromKnowledgeBase(kbResults) {
+  const features = new Set();
+  
+  kbResults.forEach(result => {
+    const document = result.document || {};
+    const content = (result.content || document.content || '').toLowerCase();
+    
+    // 提取GB特征（支持GB001-GB999格式）
+    const gbMatches = content.match(/gb\d{3}/gi);
+    if (gbMatches) {
+      gbMatches.forEach(match => {
+        const featureId = match.toUpperCase();
+        // 验证特征ID格式（GB020-GB999通常是有效的）
+        const num = parseInt(featureId.substring(2));
+        if (num >= 20 && num <= 999) {
+          features.add(featureId);
+        }
+      });
     }
     
     // 提取EA特征

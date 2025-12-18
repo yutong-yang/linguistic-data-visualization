@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { DataContext } from '../context/DataContext';
-import { callGeminiAPI, addChatToHistory, checkAPIStatus, clearChatHistory, getChatHistory } from '../utils/chatUtils';
+import { callAIAPI, addChatToHistory, checkAPIStatus, clearChatHistory, getChatHistory } from '../utils/chatUtils';
 import { gbFeatures, gbOrangeFeatures, eaFeatures } from '../utils/featureData';
 import ReactMarkdown from 'react-markdown';
 
@@ -237,7 +237,7 @@ Requirements: Comprehensive, based on data and knowledge base.`;
     }]);
 
     try {
-      const response = await callGeminiAPI(explanationRequest, lang);
+      const response = await callAIAPI(explanationRequest, lang);
 
       // Remove loading message and add AI response
       setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
@@ -354,7 +354,7 @@ Use markdown formatting for better readability.`;
     }]);
 
     try {
-      const response = await callGeminiAPI(methodRequest, lang);
+      const response = await callAIAPI(methodRequest, lang);
 
       // Remove loading message and add AI response
       setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
@@ -473,7 +473,7 @@ Use markdown formatting for better readability.`;
     }]);
 
     try {
-      const response = await callGeminiAPI(conceptRequest, lang);
+      const response = await callAIAPI(conceptRequest, lang);
 
       // Remove loading message and add AI response
       setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
@@ -626,7 +626,7 @@ Requirements: Concise, accurate, data-based.`;
     }]);
 
     try {
-      const response = await callGeminiAPI(featureRequest, lang);
+      const response = await callAIAPI(featureRequest, lang);
 
       // Remove loading message and add AI response
       setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
@@ -800,7 +800,7 @@ Requirements: Detailed, data-based, focus on analyzing current features, must in
 
     try {
       // 调用AI API
-      const response = await callGeminiAPI(languageRequest);
+      const response = await callAIAPI(languageRequest);
       addMessage(response, false);
     } catch (error) {
       console.error('Language explanation error:', error);
@@ -901,7 +901,7 @@ Use markdown formatting for better readability.`;
     }]);
 
     try {
-      const response = await callGeminiAPI(recommendationRequest, lang);
+      const response = await callAIAPI(recommendationRequest, lang);
 
       // Remove loading message and add AI response
       setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
@@ -971,7 +971,7 @@ Use markdown formatting for better readability.`;
     }]);
 
     try {
-      const response = await callGeminiAPI(message, lang);
+      const response = await callAIAPI(message, lang);
 
       // Remove loading message and add AI response
       setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));

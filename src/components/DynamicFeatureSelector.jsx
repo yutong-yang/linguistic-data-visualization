@@ -16,7 +16,8 @@ const DynamicFeatureSelector = () => {
     reloadData,
     loading,
     lang,
-    langs
+    langs,
+    languageData
   } = useContext(DataContext);
   
   const [familyMapping, setFamilyMapping] = useState({});
@@ -109,6 +110,7 @@ const DynamicFeatureSelector = () => {
       setAvailableEaFeatures(eaFeatures);
       setAvailableWalsFeatures(walsFeatures);
       
+      console.log('Loaded available features:', {
         gb: gbFeatures.length,
         ea: eaFeatures.length,
         wals: walsFeatures.length
@@ -184,9 +186,6 @@ const DynamicFeatureSelector = () => {
     }
 
     try {
-      // 获取当前语言数据
-      const { languageData } = useContext(DataContext);
-      
       if (!languageData || languageData.length === 0) {
         alert(t.noDataToDownload || '没有可下载的数据，请先应用特征选择');
         return;
@@ -229,10 +228,10 @@ const DynamicFeatureSelector = () => {
       const filename = `dynamic_linguistic_data_${timestamp}`;
       smartDownload(downloadData, filename);
       
-          } catch (error) {
-        console.error(t.downloadDataError || '下载数据时出错:', error);
-        alert(t.downloadDataError || '下载数据时出错，请检查控制台');
-      }
+    } catch (error) {
+      console.error(t.downloadDataError || '下载数据时出错:', error);
+      alert(t.downloadDataError || '下载数据时出错，请检查控制台');
+    }
   };
 
   // 下载特定格式
@@ -243,8 +242,6 @@ const DynamicFeatureSelector = () => {
     }
 
     try {
-      const { languageData } = useContext(DataContext);
-      
       if (!languageData || languageData.length === 0) {
         alert(t.noDataToDownload || '没有可下载的数据，请先应用特征选择');
         return;

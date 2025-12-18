@@ -47,6 +47,13 @@ export const API_ENDPOINTS = {
     cancelTask: '/api/cancel-task'
   },
   
+  // Feature推荐
+  featureRecommendation: '/api/feature-recommendation',
+  
+  // AI Chat API
+  geminiChat: '/api/gemini/chat',
+  qianwenChat: '/api/qianwen/chat',
+  
   // 其他API端点可以在这里添加
 };
 

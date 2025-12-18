@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
@@ -11,8 +11,15 @@ import shutil
 import asyncio
 from typing import Optional, Dict, Any
 import uuid
+import httpx
 
 from knowledge_base import init_knowledge_base, get_knowledge_base, LinguisticKnowledgeBase
+from database_explorer import (
+    search_feature_descriptions,
+    get_feature_statistics,
+    clean_description,
+    get_all_feature_ids
+)
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -813,6 +820,531 @@ async def get_processing_progress():
             "status": "error",
             "error": str(e)
         }
+
+# 千问API代理端点
+class QianwenRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = "qwen-turbo"
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 2000
+
+class GeminiRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = "gemini-1.5-flash"
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 2000
+
+class FeatureRecommendationRequest(BaseModel):
+    user_query: str
+    language_data: Optional[List[Dict[str, Any]]] = None
+    feature_descriptions: Optional[Dict[str, Any]] = None
+    n_kb_results: Optional[int] = 10
+    api_provider: Optional[str] = "gemini"  # "gemini" 或 "qianwen"
+
+@app.post("/api/gemini/chat")
+async def gemini_chat(
+    request: GeminiRequest,
+    http_request: Request
+):
+    """Gemini API代理端点，用于避免CORS问题和保护API Key"""
+    try:
+        # 优先从环境变量获取API密钥
+        api_key = os.getenv("GEMINI_API_KEY")
+        
+        # 如果没有环境变量，尝试从请求头获取
+        if not api_key:
+            api_key = http_request.headers.get("X-API-Key") or http_request.headers.get("Authorization", "").replace("Bearer ", "")
+        
+        # 如果仍然没有API Key，返回错误
+        if not api_key:
+            raise HTTPException(
+                status_code=400, 
+                detail="GEMINI_API_KEY未设置。请在环境变量中设置GEMINI_API_KEY，或在请求头中提供X-API-Key"
+            )
+        
+        # Gemini API端点
+        api_url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
+        
+        # 构建请求体
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": request.prompt
+                }]
+            }]
+        }
+        
+        # 使用httpx异步调用Gemini API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{api_url}?key={api_key}",
+                headers={
+                    "Content-Type": "application/json"
+                },
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                error_text = response.text
+                logger.error(f"Gemini API error: {response.status_code} - {error_text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Gemini API调用失败: {error_text}"
+                )
+            
+            try:
+                data = response.json()
+            except Exception as e:
+                logger.error(f"Failed to parse Gemini API response as JSON: {e}. Response text: {response.text[:500]}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Gemini API返回的不是有效的JSON格式: {str(e)}"
+                )
+            
+            # 提取响应内容
+            if data.get("candidates") and len(data["candidates"]) > 0:
+                candidate = data["candidates"][0]
+                if candidate.get("content") and candidate["content"].get("parts"):
+                    content = candidate["content"]["parts"][0].get("text", "")
+                    if content:
+                        return {
+                            "success": True,
+                            "content": str(content),
+                            "usage": data.get("usage", {})
+                        }
+            
+            # 如果所有格式都不匹配，记录完整的响应以便调试
+            response_str = json.dumps(data, ensure_ascii=False, indent=2) if isinstance(data, (dict, list)) else str(data)
+            logger.error(f"Unexpected Gemini API response structure. Full response: {response_str[:1000]}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Gemini API返回格式异常。无法从响应中提取内容。响应结构: {response_str[:300]}"
+            )
+                
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="请求超时，请稍后重试")
+    except httpx.RequestError as e:
+        logger.error(f"Gemini API request error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"网络请求失败: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"调用Gemini API时出错: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"调用Gemini API时出错: {str(e)}")
+
+@app.post("/api/qianwen/chat")
+async def qianwen_chat(
+    request: QianwenRequest,
+    http_request: Request
+):
+    """千问API代理端点，用于避免CORS问题"""
+    try:
+        # 优先从环境变量获取API密钥
+        api_key = os.getenv("QIANWEN_API_KEY")
+        
+        # 如果没有环境变量，尝试从请求头获取
+        if not api_key:
+            api_key = http_request.headers.get("X-API-Key") or http_request.headers.get("Authorization", "").replace("Bearer ", "")
+        
+        # 如果仍然没有API Key，返回错误
+        if not api_key:
+            raise HTTPException(
+                status_code=400, 
+                detail="QIANWEN_API_KEY未设置。请在环境变量中设置QIANWEN_API_KEY，或在启动后端时设置：export QIANWEN_API_KEY=your_key"
+            )
+        
+        # 千问API端点
+        api_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+        
+        # 构建请求体
+        payload = {
+            "model": request.model,
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": request.prompt
+                    }
+                ]
+            },
+            "parameters": {
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens
+            }
+        }
+        
+        # 使用httpx异步调用千问API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                api_url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}"
+                },
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                error_text = response.text
+                logger.error(f"Qianwen API error: {response.status_code} - {error_text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"千问API调用失败: {error_text}"
+                )
+            
+            try:
+                data = response.json()
+            except Exception as e:
+                logger.error(f"Failed to parse Qianwen API response as JSON: {e}. Response text: {response.text[:500]}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"千问API返回的不是有效的JSON格式: {str(e)}"
+                )
+            
+            # 记录响应结构以便调试（只记录前500字符）
+            logger.info(f"Qianwen API response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+            
+            # 提取响应内容 - 尝试多种可能的响应格式
+            content = None
+            
+            # 格式1: output.text (千问API的标准格式)
+            if isinstance(data, dict) and data.get("output"):
+                output = data["output"]
+                if isinstance(output, dict):
+                    # 千问API返回格式: {"output": {"text": "...", "finish_reason": "stop"}}
+                    content = output.get("text")
+                    # 如果没有text，尝试choices格式（兼容其他可能的格式）
+                    if not content and output.get("choices"):
+                        choices = output["choices"]
+                        if isinstance(choices, list) and len(choices) > 0:
+                            choice = choices[0]
+                            if isinstance(choice, dict):
+                                # 尝试获取message.content
+                                message = choice.get("message", {})
+                                if isinstance(message, dict):
+                                    content = message.get("content", "")
+                                elif isinstance(message, str):
+                                    content = message
+                                # 如果message不存在，尝试直接获取content或text
+                                if not content:
+                                    content = choice.get("content") or choice.get("text")
+            
+            # 格式2: 直接是content字段
+            if not content and isinstance(data, dict) and data.get("content"):
+                content = data["content"]
+            
+            # 格式3: result字段
+            if not content and isinstance(data, dict) and data.get("result"):
+                content = data["result"]
+            
+            # 格式4: text字段（顶层）
+            if not content and isinstance(data, dict) and data.get("text"):
+                content = data["text"]
+            
+            # 格式5: 如果data本身就是字符串
+            if not content and isinstance(data, str):
+                content = data
+            
+            if content:
+                return {
+                    "success": True,
+                    "content": str(content),
+                    "usage": data.get("usage", {}) if isinstance(data, dict) else {}
+                }
+            else:
+                # 如果所有格式都不匹配，记录完整的响应以便调试
+                response_str = json.dumps(data, ensure_ascii=False, indent=2) if isinstance(data, (dict, list)) else str(data)
+                logger.error(f"Unexpected Qianwen API response structure. Full response: {response_str[:1000]}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"千问API返回格式异常。无法从响应中提取内容。响应结构: {response_str[:300]}"
+                )
+                
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="请求超时，请稍后重试")
+    except httpx.RequestError as e:
+        logger.error(f"Qianwen API request error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"网络请求失败: {str(e)}")
+    except Exception as e:
+        logger.error(f"Qianwen API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"调用千问API时出错: {str(e)}")
+
+async def call_gemini_api(prompt: str, api_key: str) -> str:
+    """调用 Gemini API"""
+    try:
+        api_url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
+        
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": prompt
+                }]
+            }]
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{api_url}?key={api_key}",
+                headers={"Content-Type": "application/json"},
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Gemini API 请求失败: {response.text}"
+                )
+            
+            data = response.json()
+            
+            if data.get("candidates") and len(data["candidates"]) > 0:
+                candidate = data["candidates"][0]
+                if candidate.get("content") and candidate["content"].get("parts"):
+                    return candidate["content"]["parts"][0].get("text", "")
+            
+            raise HTTPException(status_code=500, detail="Gemini API 返回格式异常")
+            
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="请求超时，请稍后重试")
+    except Exception as e:
+        logger.error(f"调用 Gemini API 时出错: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"调用 Gemini API 时出错: {str(e)}")
+
+def extract_features_from_knowledge_base(kb_results: List[Dict[str, Any]]) -> List[str]:
+    """从知识库搜索结果中提取特征 ID"""
+    features = set()
+    import re
+    
+    for result in kb_results:
+        document = result.get("document", {})
+        content = (result.get("content") or document.get("content") or "").lower()
+        
+        # 提取 GB 特征
+        gb_matches = re.findall(r'gb\d{3}', content, re.IGNORECASE)
+        for match in gb_matches:
+            feature_id = match.upper()
+            num = int(feature_id[2:])
+            if 20 <= num <= 999:
+                features.add(feature_id)
+        
+        # 提取 EA 特征
+        ea_matches = re.findall(r'ea\d{3}', content, re.IGNORECASE)
+        for match in ea_matches:
+            features.add(match.upper())
+        
+        # 提取环境特征
+        if "richness" in content:
+            features.update([
+                "AmphibianRichness",
+                "BirdRichness",
+                "MammalRichness",
+                "VascularPlantsRichness"
+            ])
+    
+    return list(features)
+
+@app.post("/api/feature-recommendation")
+async def recommend_features(
+    request: FeatureRecommendationRequest,
+    http_request: Request
+):
+    """特征推荐端点"""
+    try:
+        # 确定使用的 API provider
+        api_provider = request.api_provider or "gemini"
+        
+        # 获取 API Key
+        api_key = None
+        if api_provider == "qianwen":
+            # 优先从环境变量获取
+            api_key = os.getenv("QIANWEN_API_KEY")
+            # 如果没有环境变量，从请求头获取
+            if not api_key:
+                api_key = http_request.headers.get("X-API-Key") or http_request.headers.get("Authorization", "").replace("Bearer ", "")
+            
+            if not api_key:
+                raise HTTPException(
+                    status_code=400,
+                    detail="QIANWEN_API_KEY未设置。请在环境变量中设置QIANWEN_API_KEY，或在请求头中提供X-API-Key"
+                )
+        else:
+            # Gemini
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                api_key = http_request.headers.get("X-API-Key") or http_request.headers.get("Authorization", "").replace("Bearer ", "")
+            
+            if not api_key:
+                raise HTTPException(
+                    status_code=400,
+                    detail="GEMINI_API_KEY未设置。请在环境变量中设置GEMINI_API_KEY，或在请求头中提供X-API-Key"
+                )
+        
+        # 1. 获取数据库统计信息
+        stats = get_feature_statistics()
+        
+        # 2. 搜索相关特征描述（CSV数据库）
+        search_results = search_feature_descriptions(request.user_query, 30)
+        
+        # 3. 搜索知识库（PDF文档）
+        knowledge_base_context = ""
+        extracted_features = []
+        
+        if knowledge_base:
+            try:
+                kb_results = knowledge_base.search(request.user_query, request.n_kb_results or 10)
+                
+                if kb_results and len(kb_results) > 0:
+                    knowledge_base_context = "\n=== 知识库（PDF研究文献）相关内容 ===\n"
+                    for index, result in enumerate(kb_results[:10], 1):
+                        document = result.get("document", {})
+                        metadata = result.get("metadata") or document.get("metadata", {})
+                        content = result.get("content") or document.get("content", "")
+                        source_name = metadata.get("filename") or metadata.get("source") or "未知文档"
+                        
+                        knowledge_base_context += f"\n**文献 {index}**: {source_name}\n"
+                        knowledge_base_context += f"**内容**: {content[:400]}{'...' if len(content) > 400 else ''}\n"
+                        knowledge_base_context += "\n---\n"
+                    
+                    # 从知识库内容中提取特征ID
+                    extracted_features = extract_features_from_knowledge_base(kb_results)
+                    if extracted_features:
+                        knowledge_base_context += f"\n**从文献中提取的特征ID**: {', '.join(extracted_features[:15])}\n"
+            except Exception as e:
+                logger.warning(f"知识库搜索失败（不影响推荐）: {e}")
+        
+        # 4. 获取当前数据中的特征
+        current_features = []
+        if request.language_data:
+            import re
+            for lang in request.language_data:
+                for key in lang.keys():
+                    if (key.startswith('GB') or key.startswith('EA') or 'Richness' in key):
+                        if key.startswith('GB'):
+                            match = re.match(r'^GB(\d{3})$', key)
+                            if match:
+                                num = int(match.group(1))
+                                if num >= 20:
+                                    current_features.append(key)
+                        else:
+                            current_features.append(key)
+        
+        current_features = list(set(current_features))[:20]
+        
+        # 5. 构建数据样本
+        data_sample = ""
+        if request.language_data and len(request.language_data) > 0:
+            sample_langs = request.language_data[:5]
+            data_sample = "\n=== 数据样本 (5种语言) ===\n"
+            for lang in sample_langs:
+                name = lang.get('Name') or lang.get('name', '')
+                family = lang.get('Family_level_ID') or lang.get('family', '')
+                features_str = ', '.join([
+                    f"{k}={v}" for k, v in list(lang.items())[:10]
+                    if k not in ['Name', 'name', 'Family_level_ID', 'family']
+                ])
+                data_sample += f"{name} ({family}): {features_str}\n"
+        
+        # 6. 构建 LLM 提示
+        # 构建特征列表字符串
+        features_text = "\n".join([
+            f"{feature.get('id', '')} ({feature.get('source', '')}): {feature.get('name', '')}\n  分类: {feature.get('category', '')}\n  描述: {clean_description(feature.get('description', ''))[:150]}..."
+            for feature in search_results
+        ])
+        
+        current_features_text = ', '.join(current_features)
+        if len(current_features) > 20:
+            current_features_text += '...'
+        
+        prompt = f"""你是一位专业的语言学数据分析专家。现在你有机会探索完整的语言学数据库和知识库（研究文献）来为用户推荐最相关的特征。
+
+=== 用户问题 ===
+{request.user_query}
+
+=== 完整数据库信息 ===
+Grambank数据库: {stats.get('totalGrambankFeatures', 0)} 个语法特征
+D-PLACE数据库: {stats.get('totalDplaceFeatures', 0)} 个社会文化特征
+
+=== 搜索到的相关特征（CSV数据库）({len(search_results)}个) ===
+{features_text}
+{knowledge_base_context}
+
+=== 当前数据中的特征 ({len(current_features)}个) ===
+{current_features_text}
+{data_sample}
+
+=== 任务 ===
+请分析用户问题，从完整数据库和知识库中推荐最相关的特征。你可以：
+1. 从搜索到的相关特征（CSV数据库）中选择
+2. 参考知识库（PDF文献）中提到的特征和研究发现
+3. 从当前数据中的特征中选择
+4. 推荐数据库中其他相关特征
+
+请按以下JSON格式返回推荐：
+
+{{
+  "recommendations": [
+    {{
+      "category": "特征分类名称",
+      "name": "推荐组名称", 
+      "description": "推荐理由",
+      "features": ["特征ID1", "特征ID2", "特征ID3"],
+      "reason": "为什么推荐这些特征（可以引用知识库中的研究发现）",
+      "source": "Grambank/D-PLACE/Knowledge Base/Current Data"
+    }}
+  ]
+}}
+
+要求：
+1. 优先推荐搜索到的相关特征（CSV数据库）
+2. 如果知识库中有相关研究，可以参考并引用
+3. 确保推荐的特征在数据库中实际存在
+4. 考虑特征之间的关联性和互补性
+5. 提供清晰的推荐理由，可以结合知识库中的研究发现
+6. 标注特征来源（Grambank/D-PLACE/Knowledge Base/当前数据）"""
+        
+        # 7. 调用 LLM 获取推荐
+        if api_provider == "qianwen":
+            response_text = await call_qianwen_api_for_recommendation(prompt, api_key)
+        else:
+            response_text = await call_gemini_api(prompt, api_key)
+        
+        # 8. 解析响应
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(0))
+                if parsed.get("recommendations"):
+                    # 验证特征是否存在
+                    all_feature_ids = get_all_feature_ids()
+                    valid_gb = set(all_feature_ids.get('grambank', []))
+                    valid_ea = set(all_feature_ids.get('dplace', []))
+                    
+                    for rec in parsed["recommendations"]:
+                        valid_features = []
+                        for feature_id in rec.get("features", []):
+                            if feature_id in valid_gb or feature_id in valid_ea or 'Richness' in feature_id:
+                                valid_features.append(feature_id)
+                        rec["features"] = valid_features
+                    
+                    # 过滤掉没有有效特征的推荐
+                    parsed["recommendations"] = [
+                        rec for rec in parsed["recommendations"]
+                        if len(rec.get("features", [])) > 0
+                    ]
+                    
+                    return parsed
+            except json.JSONDecodeError as e:
+                logger.warning(f"LLM响应解析失败: {e}")
+        
+        # 如果解析失败，返回空推荐
+        return {"recommendations": []}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"特征推荐失败: {e}")
+        raise HTTPException(status_code=500, detail=f"特征推荐失败: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

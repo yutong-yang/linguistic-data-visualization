@@ -33,6 +33,7 @@ const CategoricalFeatureFilter = () => {
   const [selectedFeature, setSelectedFeature] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAllFilters, setShowAllFilters] = useState(false);
+  const [featureGroups, setFeatureGroups] = useState([]); // 存储具有相同代码集合的特征组
   
   // 获取特征对应的颜色（基于特征ID的哈希，与MapView保持一致）
   const getFeatureColor = (featureId) => {
@@ -43,6 +44,83 @@ const CategoricalFeatureFilter = () => {
     }
     const index = Math.abs(hash) % categoricalColorPalette.length;
     return categoricalColorPalette[index];
+  };
+
+  // 识别具有相同代码集合的特征组
+  const identifyFeatureGroups = (features, codesByVar) => {
+    // 创建一个映射：代码集合签名 -> 特征列表
+    const groupsMap = {};
+    
+    features.forEach(featureId => {
+      const codes = codesByVar[featureId];
+      if (!codes || codes.length === 0) return;
+      
+      // 创建代码集合的签名（基于代码名称和描述排序后的字符串）
+      // 使用名称和描述的组合来确保更准确的匹配
+      const codeSignature = codes
+        .map(c => `${c.name}|${c.description}`)
+        .sort()
+        .join('||');
+      
+      if (!groupsMap[codeSignature]) {
+        // 保存排序后的代码列表（按名称排序）
+        groupsMap[codeSignature] = {
+          features: [],
+          codes: [...codes].sort((a, b) => a.name.localeCompare(b.name))
+        };
+      }
+      groupsMap[codeSignature].features.push(featureId);
+    });
+    
+    // 只返回包含多个特征的分组，并按特征数量排序（多的在前）
+    return Object.values(groupsMap)
+      .filter(group => group.features.length > 1)
+      .map(group => ({
+        ...group,
+        features: group.features.sort() // 排序特征ID
+      }))
+      .sort((a, b) => b.features.length - a.features.length); // 按特征数量降序排列
+  };
+
+  // 一键选择/取消选择某个类别在所有相关特征中
+  const handleBulkSelectCategory = (categoryName, featureIds) => {
+    setCategoricalFilters(prev => {
+      const newFilters = { ...prev };
+      
+      // 检查是否所有特征都已选择该类别
+      const allSelected = featureIds.every(featureId => {
+        const codes = availableCodes[featureId] || [];
+        const matchingCode = codes.find(c => c.name === categoryName);
+        return matchingCode && prev[featureId]?.includes(matchingCode.id);
+      });
+      
+      // 如果全部已选中，则取消选择；否则添加选择
+      featureIds.forEach(featureId => {
+        const codes = availableCodes[featureId] || [];
+        const matchingCode = codes.find(code => code.name === categoryName);
+        
+        if (matchingCode) {
+          if (!newFilters[featureId]) {
+            newFilters[featureId] = [];
+          }
+          
+          if (allSelected) {
+            // 取消选择
+            newFilters[featureId] = newFilters[featureId].filter(id => id !== matchingCode.id);
+            if (newFilters[featureId].length === 0) {
+              delete newFilters[featureId];
+            }
+          } else {
+            // 添加选择
+            if (!newFilters[featureId].includes(matchingCode.id)) {
+              newFilters[featureId] = [...newFilters[featureId], matchingCode.id];
+            }
+          }
+        }
+      });
+      
+      return newFilters;
+    });
   };
 
   // 加载分类变量和它们的codes
@@ -79,6 +157,10 @@ const CategoricalFeatureFilter = () => {
         });
         
         setCategoricalFeatures(categoricalList);
+        
+        // 识别具有相同代码集合的特征组
+        const groups = identifyFeatureGroups(categoricalList, codesByVar);
+        setFeatureGroups(groups);
         
       } catch (error) {
         console.error('Failed to load categorical data:', error);
@@ -180,6 +262,84 @@ const CategoricalFeatureFilter = () => {
       
       {isExpanded && (
         <div>
+      
+      {/* 显示具有相同代码集合的特征组 */}
+      {featureGroups.length > 0 && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '8px',
+          background: '#e7f3ff',
+          borderRadius: '4px',
+          border: '1px solid #b3d9ff',
+          fontSize: '10px'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '6px', fontSize: '11px' }}>
+            {lang === 'zh' ? '相同类别特征组 (一键选择):' : 'Identical Category Groups (Bulk Select):'}
+          </div>
+          {featureGroups.map((group, groupIndex) => (
+            <div key={groupIndex} style={{
+              marginBottom: '8px',
+              padding: '6px',
+              background: 'white',
+              borderRadius: '3px',
+              border: '1px solid #ddd'
+            }}>
+              <div style={{ 
+                marginBottom: '4px',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                color: '#2c7c6c'
+              }}>
+                {group.features.join(', ')}
+                <span style={{ 
+                  marginLeft: '6px',
+                  fontSize: '9px',
+                  color: '#666',
+                  fontWeight: 'normal'
+                }}>
+                  ({group.features.length} {lang === 'zh' ? '个特征' : 'features'})
+                </span>
+              </div>
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '4px',
+                marginTop: '4px'
+              }}>
+                {group.codes.map((code, codeIndex) => {
+                  // 检查是否所有特征都已选择该类别
+                  const allSelected = group.features.every(featureId => {
+                    const codes = availableCodes[featureId] || [];
+                    const matchingCode = codes.find(c => c.name === code.name);
+                    return matchingCode && categoricalFilters[featureId]?.includes(matchingCode.id);
+                  });
+                  
+                  return (
+                    <button
+                      key={`${groupIndex}-${codeIndex}-${code.name}`}
+                      onClick={() => handleBulkSelectCategory(code.name, group.features)}
+                      style={{
+                        padding: '3px 8px',
+                        background: allSelected ? '#2c7c6c' : '#6c757d',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '9px',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title={code.description !== code.name ? code.description : ''}
+                    >
+                      {code.name}
+                      {allSelected && ' ✓'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       
       {/* 特征选择下拉框 */}
       <select

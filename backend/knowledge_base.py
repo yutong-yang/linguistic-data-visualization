@@ -37,36 +37,170 @@ class LightweightDocumentStore:
         self.metadata = self._load_data(self.metadata_file, [])
         self.vectors = self._load_data(self.vectors_file, None)
         
-        # 初始化向量化器
+        # 初始化向量化器 - 优先级：Ollama > sentence-transformers > TF-IDF
+        self.embedding_model = None
+        self.use_ollama = False
+        self.use_sentence_transformers = False
+        
+        # 优先尝试使用Ollama（本地模型，隐私友好，Mac友好）
+        # 直接使用ollama Python包，避免langchain-ollama的版本冲突
         try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            from sklearn.metrics.pairwise import cosine_similarity
-            import numpy as np
-            
-            self.vectorizer = TfidfVectorizer(
-                max_features=10000,
-                stop_words='english',
-                ngram_range=(1, 2)
-            )
-            # 如果有文档，重新训练向量化器
-            if self.documents and len(self.documents) > 0:
-                try:
-                    logger.info(f"重新训练向量化器，文档数量: {len(self.documents)}")
-                    self.vectors = self.vectorizer.fit_transform(self.documents)
-                    self.is_fitted = True
-                    logger.info("向量化器训练成功")
-                except Exception as e:
-                    logger.error(f"向量化器训练失败: {e}")
+            import ollama
+            # 检查Ollama服务是否可用（只检查API是否可访问，不发送embedding请求）
+            try:
+                # 轻量级检查：只检查服务是否运行，不生成embedding
+                import httpx
+                test_response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+                if test_response.status_code == 200:
+                    # 服务可用，尝试初始化（不发送embedding请求）
+                    self.embedding_model = "nomic-embed-text"  # 存储模型名
+                    self.ollama_client = ollama  # 存储客户端
+                    self.use_ollama = True
+                    logger.info("✅ 使用 Ollama embeddings (nomic-embed-text) - 本地模型，隐私友好")
+                else:
+                    raise Exception("Ollama服务不可用")
+            except (httpx.RequestError, httpx.TimeoutException, Exception) as e:
+                logger.warning(f"Ollama不可用: {e}")
+                logger.info("💡 提示: 如果未安装Ollama，请运行: brew install ollama")
+                logger.info("💡 然后启动Ollama服务并拉取模型: ollama pull nomic-embed-text")
+                self.use_ollama = False
+                self.ollama_client = None
+        except ImportError:
+            logger.info("ollama Python包未安装，跳过Ollama embeddings")
+            logger.info("💡 要使用Ollama，请安装: pip install ollama")
+            self.use_ollama = False
+            self.ollama_client = None
+        
+        # 如果Ollama不可用，尝试使用sentence-transformers（本地模型，无需API key）
+        if not self.use_ollama:
+            try:
+                from sentence_transformers import SentenceTransformer
+                # 使用轻量级多语言模型，支持中英文
+                # all-MiniLM-L6-v2: 轻量级，速度快，支持多语言
+                # 首次使用会自动下载模型（约80MB）
+                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                self.use_sentence_transformers = True
+                logger.info("✅ 使用 sentence-transformers 本地embedding模型 (all-MiniLM-L6-v2)")
+            except ImportError:
+                logger.info("sentence-transformers未安装，将使用TF-IDF作为备用方案")
+                logger.info("💡 要使用更好的embedding，请安装: pip install sentence-transformers")
+                self.use_sentence_transformers = False
+        
+        # 如果Ollama和sentence-transformers都不可用，使用TF-IDF作为备用
+        if not self.use_ollama and not self.use_sentence_transformers:
+            try:
+                from sklearn.feature_extraction.text import TfidfVectorizer
+                from sklearn.metrics.pairwise import cosine_similarity
+                import numpy as np
+                
+                # 优化的TF-IDF参数，提升搜索质量
+                self.vectorizer = TfidfVectorizer(
+                    max_features=20000,  # 增加特征数量，捕获更多词汇
+                    stop_words='english',  # 移除英文停用词
+                    ngram_range=(1, 3),  # 扩展到3-gram，捕获更多短语
+                    min_df=2,  # 至少出现在2个文档中的词才考虑
+                    max_df=0.95,  # 出现在95%以上文档的词忽略（太常见）
+                    sublinear_tf=True,  # 使用对数TF，降低高频词权重
+                    norm='l2',  # L2归一化
+                    analyzer='word'  # 按词分析
+                )
+                # 如果有文档，重新训练向量化器
+                if self.documents and len(self.documents) > 0:
+                    try:
+                        logger.info(f"重新训练TF-IDF向量化器，文档数量: {len(self.documents)}")
+                        self.vectors = self.vectorizer.fit_transform(self.documents)
+                        self.is_fitted = True
+                        logger.info("TF-IDF向量化器训练成功")
+                    except Exception as e:
+                        logger.error(f"向量化器训练失败: {e}")
+                        self.vectors = None
+                        self.is_fitted = False
+                else:
                     self.vectors = None
                     self.is_fitted = False
-            else:
+            except ImportError as e:
+                logger.warning(f"sklearn导入失败，使用简单搜索: {e}")
+                self.vectorizer = None
                 self.vectors = None
                 self.is_fitted = False
-        except ImportError as e:
-            logger.warning(f"sklearn导入失败，使用简单搜索: {e}")
-            self.vectorizer = None
-            self.vectors = None
-            self.is_fitted = False
+        
+        # 如果使用Ollama或sentence-transformers，检查是否需要生成embedding
+        if (self.use_ollama or self.use_sentence_transformers) and self.embedding_model:
+            if self.documents and len(self.documents) > 0:
+                # 检查是否已有保存的向量
+                # 处理稀疏矩阵和密集矩阵的情况
+                vectors_len = None
+                if self.vectors is not None:
+                    try:
+                        if hasattr(self.vectors, 'shape'):
+                            vectors_len = self.vectors.shape[0]  # 稀疏或密集矩阵
+                        else:
+                            vectors_len = len(self.vectors)  # 列表或数组
+                    except:
+                        vectors_len = None
+                
+                if vectors_len is not None and vectors_len == len(self.documents):
+                    model_name = "Ollama" if self.use_ollama else "sentence-transformers"
+                    logger.info(f"加载已保存的{model_name} embedding向量，文档数量: {len(self.documents)}")
+                    self.is_fitted = True
+                else:
+                    # 需要重新生成embedding
+                    try:
+                        model_name = "Ollama" if self.use_ollama else "sentence-transformers"
+                        logger.info(f"使用{model_name}生成embedding，文档数量: {len(self.documents)}")
+                        
+                        if self.use_ollama:
+                            # Ollama embeddings使用ollama.embeddings()方法
+                            import numpy as np
+                            total_docs = len(self.documents)
+                            embeddings = []
+                            # 禁用httpx的详细日志以减少噪音
+                            import logging
+                            httpx_logger = logging.getLogger("httpx")
+                            original_level = httpx_logger.level
+                            httpx_logger.setLevel(logging.WARNING)
+                            
+                            try:
+                                for i, doc in enumerate(self.documents):
+                                    try:
+                                        response = self.ollama_client.embeddings(
+                                            model=self.embedding_model,
+                                            prompt=doc
+                                        )
+                                        if response and "embedding" in response:
+                                            embeddings.append(response["embedding"])
+                                        else:
+                                            embeddings.append([0.0] * 768)  # 默认维度
+                                        
+                                        # 每10个文档显示一次进度
+                                        if (i + 1) % 10 == 0 or (i + 1) == total_docs:
+                                            logger.info(f"  进度: {i + 1}/{total_docs} ({100*(i+1)//total_docs}%)")
+                                    except Exception as e:
+                                        logger.warning(f"生成embedding失败: {e}，使用零向量")
+                                        embeddings.append([0.0] * 768)
+                            finally:
+                                # 恢复httpx日志级别
+                                httpx_logger.setLevel(original_level)
+                            
+                            self.vectors = np.array(embeddings)
+                        else:
+                            # sentence-transformers使用encode方法
+                            self.vectors = self.embedding_model.encode(
+                                self.documents,
+                                show_progress_bar=True,
+                                batch_size=32,
+                                convert_to_numpy=True
+                            )
+                        
+                        self.is_fitted = True
+                        logger.info(f"{model_name} embedding生成成功")
+                        # 保存embedding向量
+                        self._save_data(self.vectors_file, self.vectors)
+                    except Exception as e:
+                        model_name = "Ollama" if self.use_ollama else "sentence-transformers"
+                        logger.error(f"{model_name} embedding生成失败: {e}")
+                        self.vectors = None
+                        self.is_fitted = False
     
     def _load_data(self, file_path: Path, default_value):
         """安全加载数据文件"""
@@ -152,10 +286,75 @@ class LightweightDocumentStore:
             self.documents.extend(new_documents)
             self.metadata.extend(cleaned_metadatas)
             
-            # 重新训练向量化器
-            if SKLEARN_AVAILABLE and self.vectorizer:
-                self.vectors = self.vectorizer.fit_transform(self.documents)
-                self.is_fitted = True
+            # 重新生成向量 - 优先级：Ollama > sentence-transformers > TF-IDF
+            if self.use_ollama and self.embedding_model and self.ollama_client:
+                try:
+                    import numpy as np
+                    total_docs = len(self.documents)
+                    logger.info(f"使用Ollama embeddings为 {total_docs} 个文档生成embedding...")
+                    # Ollama使用ollama.embeddings()方法
+                    embeddings = []
+                    # 禁用httpx的详细日志以减少噪音
+                    import logging
+                    httpx_logger = logging.getLogger("httpx")
+                    original_level = httpx_logger.level
+                    httpx_logger.setLevel(logging.WARNING)
+                    
+                    try:
+                        for i, doc in enumerate(self.documents):
+                            try:
+                                response = self.ollama_client.embeddings(
+                                    model=self.embedding_model,
+                                    prompt=doc
+                                )
+                                if response and "embedding" in response:
+                                    embeddings.append(response["embedding"])
+                                else:
+                                    embeddings.append([0.0] * 768)  # 默认维度
+                                
+                                # 每10个文档显示一次进度
+                                if (i + 1) % 10 == 0 or (i + 1) == total_docs:
+                                    logger.info(f"  进度: {i + 1}/{total_docs} ({100*(i+1)//total_docs}%)")
+                            except Exception as e:
+                                logger.warning(f"文档 {i} embedding生成失败: {e}")
+                                embeddings.append([0.0] * 768)
+                    finally:
+                        # 恢复httpx日志级别
+                        httpx_logger.setLevel(original_level)
+                    
+                    self.vectors = np.array(embeddings)
+                    self.is_fitted = True
+                    logger.info(f"✅ Ollama embedding生成成功，共 {total_docs} 个文档")
+                except Exception as e:
+                    logger.error(f"Ollama embedding生成失败: {e}")
+                    self.vectors = None
+                    self.is_fitted = False
+            elif self.use_sentence_transformers and self.embedding_model:
+                try:
+                    logger.info(f"使用sentence-transformers为 {len(self.documents)} 个文档生成embedding...")
+                    self.vectors = self.embedding_model.encode(
+                        self.documents,
+                        show_progress_bar=True,
+                        batch_size=32,
+                        convert_to_numpy=True
+                    )
+                    self.is_fitted = True
+                    logger.info("sentence-transformers embedding生成成功")
+                except Exception as e:
+                    logger.error(f"sentence-transformers embedding生成失败: {e}")
+                    self.vectors = None
+                    self.is_fitted = False
+            # 回退到TF-IDF
+            elif SKLEARN_AVAILABLE and self.vectorizer:
+                try:
+                    logger.info(f"使用TF-IDF为 {len(self.documents)} 个文档生成向量...")
+                    self.vectors = self.vectorizer.fit_transform(self.documents)
+                    self.is_fitted = True
+                    logger.info("TF-IDF向量化成功")
+                except Exception as e:
+                    logger.error(f"TF-IDF向量化失败: {e}")
+                    self.vectors = None
+                    self.is_fitted = False
             
             # 保存数据
             self._save_data(self.documents_file, self.documents)
@@ -244,36 +443,126 @@ class LightweightDocumentStore:
     
     def query(self, query_texts: List[str], n_results: int = 5):
         """查询相似文档"""
-        if not self.is_fitted or not self.vectorizer:
-            # 使用简单搜索作为备用
-            logger.info("向量化器不可用，使用简单搜索")
-            return self.simple_search(query_texts[0], n_results)
+        query = query_texts[0]
         
-        try:
-            from sklearn.metrics.pairwise import cosine_similarity
-            import numpy as np
-            
-            query = query_texts[0]
-            query_vector = self.vectorizer.transform([query])
-            
-            # 计算相似度
-            similarities = cosine_similarity(query_vector, self.vectors).flatten()
-            
-            # 获取最相似的文档索引
-            top_indices = np.argsort(similarities)[::-1][:n_results]
-            
-            # 构建结果
-            results = {
-                "documents": [[self.documents[i] for i in top_indices]],
-                "metadatas": [[self.metadata[i] for i in top_indices]],
-                "distances": [[1 - similarities[i] for i in top_indices]]  # 转换为距离
-            }
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"向量搜索失败，回退到简单搜索: {e}")
-            return self.simple_search(query_texts[0], n_results)
+        # 优先级：Ollama > sentence-transformers > TF-IDF
+        # 优先使用Ollama embeddings
+        if self.use_ollama and self.embedding_model and self.ollama_client and self.is_fitted and self.vectors is not None:
+            try:
+                import numpy as np
+                from sklearn.metrics.pairwise import cosine_similarity
+                
+                # 将查询转换为embedding（使用ollama.embeddings()）
+                response = self.ollama_client.embeddings(
+                    model=self.embedding_model,
+                    prompt=query
+                )
+                if not response or "embedding" not in response:
+                    raise Exception("Ollama embedding返回空结果")
+                query_embedding = np.array([response["embedding"]])
+                
+                # 计算相似度
+                similarities = cosine_similarity(query_embedding, self.vectors).flatten()
+                
+                # 获取最相似的文档索引
+                top_indices = np.argsort(similarities)[::-1][:n_results]
+                
+                # 构建结果
+                results = {
+                    "documents": [[self.documents[i] for i in top_indices]],
+                    "metadatas": [[self.metadata[i] for i in top_indices]],
+                    "distances": [[1 - similarities[i] for i in top_indices]]  # 转换为距离
+                }
+                
+                logger.info(f"使用Ollama embeddings搜索，找到 {len(top_indices)} 个结果")
+                return results
+                
+            except Exception as e:
+                logger.error(f"Ollama embeddings搜索失败: {e}，回退到其他方法")
+                # 回退到sentence-transformers或TF-IDF
+        
+        # 使用sentence-transformers
+        if self.use_sentence_transformers and self.embedding_model and self.is_fitted and self.vectors is not None:
+            try:
+                import numpy as np
+                from sklearn.metrics.pairwise import cosine_similarity
+                
+                # 将查询转换为embedding
+                query_embedding = self.embedding_model.encode([query], convert_to_numpy=True)
+                
+                # 计算相似度
+                similarities = cosine_similarity(query_embedding, self.vectors).flatten()
+                
+                # 获取最相似的文档索引
+                top_indices = np.argsort(similarities)[::-1][:n_results]
+                
+                # 构建结果
+                results = {
+                    "documents": [[self.documents[i] for i in top_indices]],
+                    "metadatas": [[self.metadata[i] for i in top_indices]],
+                    "distances": [[1 - similarities[i] for i in top_indices]]  # 转换为距离
+                }
+                
+                logger.info(f"使用sentence-transformers搜索，找到 {len(top_indices)} 个结果")
+                return results
+                
+            except Exception as e:
+                logger.error(f"sentence-transformers搜索失败: {e}，回退到TF-IDF")
+                # 回退到TF-IDF
+        
+        # 使用TF-IDF作为备用（改进版：混合搜索）
+        if self.is_fitted and self.vectorizer and self.vectors is not None:
+            try:
+                from sklearn.metrics.pairwise import cosine_similarity
+                import numpy as np
+                
+                query_vector = self.vectorizer.transform([query])
+                
+                # 计算TF-IDF相似度
+                tfidf_similarities = cosine_similarity(query_vector, self.vectors).flatten()
+                
+                # 混合搜索：结合TF-IDF和关键词匹配
+                query_lower = query.lower()
+                query_words = [w.strip() for w in query_lower.split() if len(w.strip()) > 2]
+                
+                # 计算关键词匹配分数
+                keyword_scores = np.zeros(len(self.documents))
+                for i, doc in enumerate(self.documents):
+                    doc_lower = doc.lower()
+                    for word in query_words:
+                        if word in doc_lower:
+                            # 完全匹配给予更高分数
+                            if f" {word} " in f" {doc_lower} ":
+                                keyword_scores[i] += 2.0
+                            else:
+                                keyword_scores[i] += 1.0
+                
+                # 归一化关键词分数
+                if keyword_scores.max() > 0:
+                    keyword_scores = keyword_scores / keyword_scores.max()
+                
+                # 混合分数：70% TF-IDF + 30% 关键词匹配
+                combined_scores = (tfidf_similarities * 0.7) + (keyword_scores * 0.3)
+                
+                # 获取最相似的文档索引
+                top_indices = np.argsort(combined_scores)[::-1][:n_results]
+                
+                # 构建结果（使用混合分数计算距离）
+                results = {
+                    "documents": [[self.documents[i] for i in top_indices]],
+                    "metadatas": [[self.metadata[i] for i in top_indices]],
+                    "distances": [[1 - combined_scores[i] for i in top_indices]]  # 转换为距离
+                }
+                
+                logger.info(f"使用改进的TF-IDF混合搜索，找到 {len(top_indices)} 个结果")
+                return results
+                
+            except Exception as e:
+                logger.error(f"TF-IDF搜索失败: {e}")
+        
+        # 最后回退到简单搜索
+        logger.info("向量化器不可用，使用简单搜索")
+        return self.simple_search(query, n_results)
     
     def count(self):
         """返回文档数量"""
@@ -347,28 +636,40 @@ class LinguisticKnowledgeBase:
         self.collection = LightweightDocumentStore(db_path)
         logger.info("使用轻量级文档存储方案")
         
-        # Embedding模型选择
-        if openai_api_key:
+        # Embedding模型选择 - 实际使用的是LightweightDocumentStore中的embedding
+        # 优先级：Ollama > OpenAI > sentence-transformers > TF-IDF
+        self.embeddings = None
+        
+        # 检查LightweightDocumentStore实际使用的embedding方法
+        if hasattr(self.collection, 'use_ollama') and self.collection.use_ollama:
+            self.embedding_method = "Ollama"
+            # Ollama已经在LightweightDocumentStore中初始化，这里不需要额外操作
+        elif openai_api_key:
             try:
                 os.environ["OPENAI_API_KEY"] = openai_api_key
                 self.embeddings = OpenAIEmbeddings()
                 self.embedding_method = "OpenAI"
                 logger.info("使用 OpenAI embedding 模型")
             except Exception as e:
-                logger.warning(f"OpenAI embedding 初始化失败，使用轻量级方案: {e}")
-                self.embeddings = None
-                self.embedding_method = "轻量级 TF-IDF"
+                logger.warning(f"OpenAI embedding 初始化失败: {e}")
+                # 回退到LightweightDocumentStore的方法
+                if hasattr(self.collection, 'use_sentence_transformers') and self.collection.use_sentence_transformers:
+                    self.embedding_method = "sentence-transformers"
+                else:
+                    self.embedding_method = "TF-IDF"
+        elif hasattr(self.collection, 'use_sentence_transformers') and self.collection.use_sentence_transformers:
+            self.embedding_method = "sentence-transformers"
+            logger.info("使用 sentence-transformers 本地embedding模型")
         else:
-            # 默认使用轻量级 embedding
-            self.embeddings = None
-            self.embedding_method = "轻量级 TF-IDF"
-            logger.info("使用轻量级 TF-IDF embedding 模型")
+            self.embedding_method = "TF-IDF"
+            logger.info("使用 TF-IDF embedding 模型")
         
-        # 文本分割器
+        # 优化的文本分割器 - 更大的块和重叠，保留更多上下文
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=1500,  # 增加块大小，保留更多上下文
+            chunk_overlap=300,  # 增加重叠，确保重要信息不被分割
             length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]  # 智能分割，优先按段落
         )
         
         logger.info(f"知识库初始化完成，路径: {db_path}")

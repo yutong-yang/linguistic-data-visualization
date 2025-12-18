@@ -180,7 +180,15 @@ export async function searchFeatureDescriptions(query, limit = 20) {
         word.length > 2 && searchText.includes(word)
       );
       
-      return originalMatch || expandedMatch;
+      // 特殊处理：如果查询包含"性别"或"gender"，也匹配分类为"Gender_or_Noun_Class"的特征
+      const isGenderQuery = queryLower.includes('性别') || queryLower.includes('gender');
+      const isGenderCategory = param.category && (
+        param.category.toLowerCase().includes('gender') || 
+        param.category.toLowerCase().includes('noun class') ||
+        param.category === '1'  // Gender_or_Noun_Class分类标记为1
+      );
+      
+      return originalMatch || expandedMatch || (isGenderQuery && isGenderCategory);
     }).slice(0, limit);
     
     if (gbMatches.length > 0) {

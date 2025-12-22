@@ -43,15 +43,24 @@ function validateFeatures(features, languageData, featureDescriptions) {
   const invalidFeatures = [];
   
   features.forEach(feature => {
+    // 处理对象格式 {id: '...', source: '...'} 或字符串格式
+    const featureId = typeof feature === 'object' ? feature.id : feature;
+    const featureSource = typeof feature === 'object' ? feature.source : null;
+    
     // 检查特征是否在数据中存在
-    const hasData = languageData.length > 0 && languageData[0].hasOwnProperty(feature);
+    const hasData = languageData.length > 0 && languageData[0].hasOwnProperty(featureId);
     // 检查特征是否有描述
-    const hasDescription = featureDescriptions && featureDescriptions[feature];
+    const hasDescription = featureDescriptions && featureDescriptions[featureId];
     
     if (hasData || hasDescription) {
-      validFeatures.push(feature);
+      // 如果后端提供了source信息，保留它；否则返回字符串
+      if (featureSource) {
+        validFeatures.push({id: featureId, source: featureSource});
+      } else {
+        validFeatures.push(featureId);
+      }
     } else {
-      invalidFeatures.push(feature);
+      invalidFeatures.push(featureId);
     }
   });
   
@@ -63,7 +72,7 @@ function validateFeatures(features, languageData, featureDescriptions) {
 }
 
 // 使用后端API推荐特征
-export async function recommendFeatures(userQuery, languageData, featureDescriptions) {
+export async function recommendFeatures(userQuery, languageData, featureDescriptions, userLang = 'en') {
   try {
     // 获取当前选择的 API provider
     const apiProvider = getSelectedAPIProvider() || 'gemini';
@@ -72,28 +81,85 @@ export async function recommendFeatures(userQuery, languageData, featureDescript
     const apiKey = getAPIKey(apiProvider);
     if (!apiKey) {
       const providerName = apiProvider === 'qianwen' ? 'QIANWEN' : 'GEMINI';
-      throw new Error(`${providerName}_API_KEY未设置`);
+      const errorMsg = userLang === 'zh'
+        ? `${providerName}_API_KEY未设置`
+        : `${providerName}_API_KEY is not set`;
+      throw new Error(errorMsg);
     }
     
-    // 调用后端API
-    const response = await fetch(buildApiUrl(API_ENDPOINTS.featureRecommendation), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': apiKey
-      },
-      body: JSON.stringify({
-        user_query: userQuery,
-        language_data: languageData || [],
-        feature_descriptions: featureDescriptions || {},
-        n_kb_results: 10,
-        api_provider: apiProvider  // 传递 API provider 类型
-      })
-    });
+    // 调用后端API，添加超时处理
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120秒超时
+    
+    let response;
+    try {
+      response = await fetch(buildApiUrl(API_ENDPOINTS.featureRecommendation), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey
+        },
+        body: JSON.stringify({
+          user_query: userQuery,
+          language_data: languageData || [],
+          feature_descriptions: featureDescriptions || {},
+          n_kb_results: 10,
+          api_provider: apiProvider,  // 传递 API provider 类型
+          lang: userLang || 'en'  // 传递界面语言
+        }),
+        signal: controller.signal
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        const timeoutMsg = userLang === 'zh' 
+          ? '请求超时，请稍后重试或检查网络连接'
+          : 'Request timeout, please try again later or check your network connection';
+        throw new Error(timeoutMsg);
+      }
+      const networkErrorMsg = userLang === 'zh'
+        ? `网络错误: ${fetchError.message || '无法连接到服务器'}`
+        : `Network error: ${fetchError.message || 'Unable to connect to server'}`;
+      throw new Error(networkErrorMsg);
+    }
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(errorData.detail || `API请求失败: ${response.status}`);
+      let errorMessage = userLang === 'zh'
+        ? `API请求失败: ${response.status}`
+        : `API request failed: ${response.status}`;
+      
+      // 处理不同的HTTP状态码
+      if (response.status === 504) {
+        errorMessage = userLang === 'zh'
+          ? '请求超时，服务器响应时间过长，请稍后重试'
+          : 'Request timeout, server response time is too long, please try again later';
+      } else if (response.status === 500) {
+        errorMessage = userLang === 'zh'
+          ? '服务器内部错误，请稍后重试'
+          : 'Internal server error, please try again later';
+      } else if (response.status === 400) {
+        errorMessage = userLang === 'zh'
+          ? '请求参数错误，请检查输入'
+          : 'Invalid request parameters, please check your input';
+      } else if (response.status === 401 || response.status === 403) {
+        errorMessage = userLang === 'zh'
+          ? 'API密钥无效或未设置，请检查配置'
+          : 'API key is invalid or not set, please check your configuration';
+      }
+      
+      // 尝试解析错误详情
+      try {
+        const errorData = await response.json();
+        if (errorData.detail) {
+          errorMessage = errorData.detail;
+        }
+      } catch (e) {
+        // 如果无法解析JSON，使用默认错误消息
+      }
+      
+      throw new Error(errorMessage);
     }
     
     const data = await response.json();
@@ -111,65 +177,38 @@ export async function recommendFeatures(userQuery, languageData, featureDescript
     
   } catch (error) {
     console.error('特征推荐失败:', error);
-    // 如果后端API失败，使用备用方法
-    return await fallbackRecommendation(userQuery, languageData, featureDescriptions);
+    // 重新抛出错误，让调用者能够显示错误消息
+    throw error;
   }
 }
 
 // 备用推荐方法（当LLM失败时使用）
 async function fallbackRecommendation(userQuery, languageData, featureDescriptions) {
   try {
-    const query = userQuery.toLowerCase();
-    const allFeatures = getAllAvailableFeatures(languageData);
-    const recommendations = [];
+    // 尝试使用数据库搜索作为备用方案
+    const searchResults = await searchFeatureDescriptions(userQuery, 10);
     
-    // 基于关键词的简单匹配
-    const keywordMappings = {
-      '性别': ['GB030', 'GB051', 'GB052', 'GB053', 'GB054'],
-      'gender': ['GB030', 'GB051', 'GB052', 'GB053', 'GB054'],
-      '分类词': ['GB038', 'GB057', 'GB058'],
-      'classifier': ['GB038', 'GB057', 'GB058'],
-      '形态': ['GB020', 'GB021', 'GB022', 'GB023'],
-      'morphology': ['GB020', 'GB021', 'GB022', 'GB023'],
-      '句法': ['GB025', 'GB026', 'GB027'],
-      'syntax': ['GB025', 'GB026', 'GB027'],
-      '社会': ['EA044', 'EA045', 'EA046', 'EA047', 'EA048'],
-      'social': ['EA044', 'EA045', 'EA046', 'EA047', 'EA048'],
-      '环境': ['AmphibianRichness', 'BirdRichness', 'MammalRichness', 'VascularPlantsRichness'],
-      'environment': ['AmphibianRichness', 'BirdRichness', 'MammalRichness', 'VascularPlantsRichness']
-    };
-    
-    // 查找匹配的关键词
-    for (const [keyword, features] of Object.entries(keywordMappings)) {
-      if (query.includes(keyword)) {
-        const validFeatures = validateFeatures(features, languageData, featureDescriptions);
-        if (validFeatures.length > 0) {
-          recommendations.push({
-            category: keyword,
-            name: `${keyword}相关特征`,
-            description: `基于关键词"${keyword}"的推荐`,
-            features: validFeatures,
-            reason: `匹配关键词: ${keyword}`
-          });
-        }
-      }
+    if (searchResults && searchResults.length > 0) {
+      // 基于搜索结果创建推荐
+      const recommendations = [{
+        category: 'database_search',
+        name: '数据库搜索结果',
+        description: '基于数据库搜索的相关特征',
+        features: searchResults.slice(0, 10).map(f => f.id),
+        reason: '从数据库中找到的相关特征',
+        source: 'Database Search'
+      }];
+      
+      // 验证特征
+      recommendations.forEach(rec => {
+        rec.features = validateFeatures(rec.features, languageData, featureDescriptions);
+      });
+      
+      return recommendations.filter(rec => rec.features.length > 0);
     }
     
-    // 如果没有匹配，返回一些常用特征
-    if (recommendations.length === 0) {
-      const commonFeatures = validateFeatures(['GB020', 'GB030', 'GB051', 'EA044'], languageData, featureDescriptions);
-      if (commonFeatures.length > 0) {
-        recommendations.push({
-          category: 'general',
-          name: '通用特征',
-          description: '常用的语言学特征',
-          features: commonFeatures,
-          reason: '通用推荐'
-        });
-      }
-    }
-    
-    return recommendations;
+    // 如果数据库搜索也失败，返回空数组
+    return [];
   } catch (error) {
     console.error('备用推荐失败:', error);
     return [];
@@ -195,12 +234,16 @@ function extractFeaturesFromSearchResults(results) {
       eaMatches.forEach(match => features.add(match.toUpperCase()));
     }
     
-    // 提取环境特征
+    // 提取环境特征（从内容中动态提取，不硬编码）
     if (content.includes('richness')) {
-      features.add('AmphibianRichness');
-      features.add('BirdRichness');
-      features.add('MammalRichness');
-      features.add('VascularPlantsRichness');
+      // 尝试从内容中提取具体的richness特征名称
+      const richnessMatches = content.match(/(\w+richness)/gi);
+      if (richnessMatches) {
+        richnessMatches.forEach(match => {
+          const featureName = match.charAt(0).toUpperCase() + match.slice(1);
+          features.add(featureName);
+        });
+      }
     }
   });
   
@@ -234,62 +277,41 @@ function extractFeaturesFromKnowledgeBase(kbResults) {
       eaMatches.forEach(match => features.add(match.toUpperCase()));
     }
     
-    // 提取环境特征
+    // 提取环境特征（从内容中动态提取，不硬编码）
     if (content.includes('richness')) {
-      features.add('AmphibianRichness');
-      features.add('BirdRichness');
-      features.add('MammalRichness');
-      features.add('VascularPlantsRichness');
+      // 尝试从内容中提取具体的richness特征名称
+      const richnessMatches = content.match(/(\w+richness)/gi);
+      if (richnessMatches) {
+        richnessMatches.forEach(match => {
+          const featureName = match.charAt(0).toUpperCase() + match.slice(1);
+          features.add(featureName);
+        });
+      }
     }
   });
   
   return Array.from(features);
 }
 
-// 基于数据相关性推荐特征
+// 基于数据相关性推荐特征（已移除硬编码，仅基于数据分布）
 function recommendBasedOnData(userQuery, languageData) {
   if (!languageData || languageData.length === 0) return [];
-  
-  const recommendations = [];
-  const query = userQuery.toLowerCase();
   
   // 分析数据中的特征分布
   const featureStats = analyzeFeatureDistribution(languageData);
   
-  // 根据查询内容推荐相关特征
-  if (query.includes('gender') || query.includes('性别')) {
-    const genderFeatures = featureStats.filter(f => f.feature.startsWith('GB') && 
-      (f.feature.includes('030') || f.feature.includes('051') || f.feature.includes('052')));
-    
-    if (genderFeatures.length > 0) {
-      recommendations.push({
-        category: 'data_analysis',
-        name: '语法性别分析',
-        description: '基于数据分布的性别特征推荐',
-        features: genderFeatures.map(f => f.feature),
-        score: 2,
-        reason: '数据中性别特征分布丰富'
-      });
-    }
+  // 只返回覆盖率高的特征，不进行硬编码匹配
+  if (featureStats.length > 0) {
+    return [{
+      category: 'data_analysis',
+      name: '高覆盖率特征',
+      description: '基于数据分布的特征推荐',
+      features: featureStats.slice(0, 10).map(f => f.feature),
+      reason: '数据中覆盖率较高的特征'
+    }];
   }
   
-  if (query.includes('classifier') || query.includes('分类词')) {
-    const classifierFeatures = featureStats.filter(f => f.feature.startsWith('GB') && 
-      (f.feature.includes('038') || f.feature.includes('057') || f.feature.includes('058')));
-    
-    if (classifierFeatures.length > 0) {
-      recommendations.push({
-        category: 'data_analysis',
-        name: '分类词系统分析',
-        description: '基于数据分布的分类词特征推荐',
-        features: classifierFeatures.map(f => f.feature),
-        score: 2,
-        reason: '数据中分类词特征分布丰富'
-      });
-    }
-  }
-  
-  return recommendations;
+  return [];
 }
 
 // 分析特征分布
@@ -316,43 +338,21 @@ function analyzeFeatureDistribution(languageData) {
     .sort((a, b) => b.coverage - a.coverage);
 }
 
-// 生成研究建议
+// 生成研究建议（完全基于推荐结果，无硬编码）
 export function generateResearchIdeas(userQuery, recommendations, languageData) {
   const ideas = [];
   
   if (recommendations.length === 0) return ideas;
   
-  // 基于推荐特征生成研究想法
+  // 基于推荐特征生成研究想法，完全使用推荐中的信息
   recommendations.forEach(rec => {
-    if (rec.category === 'gender') {
-      ideas.push({
-        title: '语法性别系统的跨语言比较',
-        description: `分析${rec.features.join(', ')}等性别特征在不同语言中的分布模式`,
-        features: rec.features,
-        analysis: 'correlation',
-        visualization: 'map'
-      });
-    }
-    
-    if (rec.category === 'classifier') {
-      ideas.push({
-        title: '分类词系统的类型学研究',
-        description: `探索${rec.features.join(', ')}等分类词特征的类型学模式`,
-        features: rec.features,
-        analysis: 'distribution',
-        visualization: 'heatmap'
-      });
-    }
-    
-    if (rec.category === 'knowledge_based') {
-      ideas.push({
-        title: '基于文献的数据验证研究',
-        description: `使用${rec.features.join(', ')}等特征验证相关理论假设`,
-        features: rec.features,
-        analysis: 'hypothesis_testing',
-        visualization: 'scatter'
-      });
-    }
+    // 使用推荐中的信息，不添加硬编码的分析类型或可视化方式
+    ideas.push({
+      title: rec.name || `${rec.category || '特征'}相关研究`,
+      description: rec.description || rec.reason || `分析${rec.features.slice(0, 5).join(', ')}${rec.features.length > 5 ? '等' : ''}特征`,
+      features: rec.features,
+      reason: rec.reason || rec.description || '基于推荐特征的研究建议'
+    });
   });
   
   return ideas;
@@ -363,11 +363,24 @@ export { getAllAvailableFeatures };
 
 // 获取特征详细信息
 export function getFeatureDetails(featureId, featureDescriptions) {
+  // WALS特征：数字+字母格式，如1A, 2A, 10A等
+  const isWals = /^\d+[A-Z]$/.test(featureId);
+  
+  // D-PLACE特征包括：EA开头、CARNEIRO_开头、B开头（Binford数据集，如B001, B030）、SCCS开头、Richness相关、其他环境特征
+  const isDPlace = !isWals && (
+    featureId.startsWith('EA') || 
+    featureId.startsWith('CARNEIRO_') || 
+    featureId.startsWith('SCCS') ||
+    (featureId.startsWith('B') && !featureId.startsWith('GB') && /^B\d{1,4}$/.test(featureId)) ||
+    featureId.includes('Richness') ||
+    /^(Annual|Monthly|Net|Precipitation|Temperature|Biome|EcoRegion|Elevation|Slope|DistToCoast)/.test(featureId)
+  );
+  
   return featureDescriptions[featureId] || {
     name: featureId,
     description: '特征描述不可用',
     category: featureId.startsWith('GB') ? 'Grambank' : 
-              featureId.startsWith('EA') ? 'D-PLACE' : 'Environmental'
+              isDPlace ? 'D-PLACE' : 'Environmental'
   };
 }
 

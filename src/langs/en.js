@@ -163,8 +163,8 @@ const en = {
   loadingDataMessage: "⏳ Processing data...",
   downloadSuccess: "Successfully downloaded {count} rows of static data",
   // Smart Feature Recommendations Related
-  smartFeatureRecommendationsTitle: "🎯 Smart Feature Recommendations",
-  aiSmartRecommendations: "AI Smart Recommendations",
+  smartFeatureRecommendationsTitle: "Feature Recommendation",
+  aiSmartRecommendations: "AI Recommendations",
   enterResearchQuestionOrKeywords: "Enter research question or keywords...",
   generateRecommendations: "Generate",
   currentSelection: "Current Selection",

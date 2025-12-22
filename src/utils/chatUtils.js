@@ -23,36 +23,6 @@ export function getDatasetStats(languageData, gbFeatures, gbOrangeFeatures, eaFe
   return stats;
 }
 
-// 获取特征分类信息
-export function getFeatureCategories(gbFeatures, gbOrangeFeatures, eaFeatures) {
-  return {
-    gender: {
-      name: "Gender/Noun Class Features",
-      description: "Grammatical gender and noun classification systems",
-      features: gbFeatures,
-      examples: ["GB030", "GB051", "GB052", "GB053", "GB054"]
-    },
-    classifier: {
-      name: "Classifier Features", 
-      description: "Numeral and noun classifier systems",
-      features: gbOrangeFeatures,
-      examples: ["GB038", "GB057", "GB058"]
-    },
-    social: {
-      name: "Social/Cultural Features",
-      description: "Social organization, kinship, and cultural practices",
-      features: eaFeatures.filter(f => f.startsWith('EA')),
-      examples: ["EA044", "EA045", "EA046", "EA047", "EA048"]
-    },
-    natural: {
-      name: "Environmental Features",
-      description: "Biodiversity and environmental factors",
-      features: eaFeatures.filter(f => f.includes('Richness')),
-      examples: ["AmphibianRichness", "BirdRichness", "MammalRichness", "VascularPlantsRichness"]
-    }
-  };
-}
-
 // 调用千问 API（通过后端代理，避免CORS问题）
 export async function callQianwenAPI(userMessage, lang = 'en') {
   try {
@@ -197,8 +167,8 @@ async function buildPrompt(userMessage, lang = 'en') {
       const searchResults = await searchFeatureDescriptions(userMessage, 50);
       
       if (searchResults.length > 0) {
-        // 显示更多结果（最多30个），确保包含所有相关特征
-        const displayCount = Math.min(searchResults.length, 30);
+        // 显示所有搜索结果（最多50个），确保LLM能看到所有相关特征
+        const displayCount = Math.min(searchResults.length, 50);
         relatedFeatures = `\n=== 相关特征推荐（直接来自数据库CSV文件，共找到${searchResults.length}个相关特征）===\n${searchResults.slice(0, displayCount).map(feature => 
           `${feature.id} (${feature.source}): ${feature.name}\n  分类: ${feature.category}\n  描述: ${cleanDescription ? cleanDescription(feature.description).substring(0, 200) : feature.description?.substring(0, 200) || ''}...`
         ).join('\n\n')}${searchResults.length > displayCount ? `\n\n...还有${searchResults.length - displayCount}个相关特征未显示` : ''}`;
@@ -233,12 +203,18 @@ async function buildPrompt(userMessage, lang = 'en') {
       });
       
       if (relevantResults.length > 0) {
-        knowledgeContext = `\n=== 知识库搜索结果（必须明确引用） ===\n${relevantResults.map((result, index) => {
+        knowledgeContext = `\n=== 知识库搜索结果（必须明确引用） ===\n${relevantResults.map((result) => {
           const filename = result.metadata?.filename || result.metadata?.source || '未知文档';
           const title = result.metadata?.title || filename;
           const content = result.content?.substring(0, 800) || '无内容';
-          return `【文献 ${index + 1}】\n标题/文件名: ${title}\n来源: ${filename}\n内容: ${content}${result.content && result.content.length > 800 ? '...' : ''}`;
-        }).join('\n\n')}\n\n⚠️ 重要：如果使用了上述知识库内容，必须在回答中明确引用，格式为：【引用文献X：标题/文件名】或【根据文献X：标题/文件名】。X必须是数字（如文献1、文献2），不能使用"Document X"或"Citation"等英文格式。`;
+          return `**文档名称**: ${title}\n**来源**: ${filename}\n**内容**: ${content}${result.content && result.content.length > 800 ? '...' : ''}`;
+        }).join('\n\n---\n\n')}\n\n⚠️ **引用格式要求（必须严格遵守）**：
+1. 引用时直接使用文档名称，格式为："根据[文档名称]" 或 "[文档名称]提到..."
+2. **绝对禁止**：使用"文献1"、"文献2"、"Document 1"等编号前缀
+3. **绝对禁止**：使用PDF内容片段作为文档名称
+4. **必须**：使用上述文档名称列表中列出的确切名称，不要修改或截断
+5. 正确示例："根据${relevantResults[0]?.metadata?.title || relevantResults[0]?.metadata?.filename || '[文档名称]'}" ✅
+6. 错误示例："根据文献1: ${relevantResults[0]?.metadata?.title || '[文档名称]'}" ❌（不要使用编号）`;
       } else {
         knowledgeContext = '\n=== 知识库搜索无相关结果 ===\n注意：虽然找到了一些文档片段，但相关性较低，可能无法准确回答您的问题。';
       }
@@ -287,8 +263,8 @@ ${specificFeatureInfo}${validFeatureIds}
 
 ${relatedFeatures ? 
   (isChinese 
-    ? `\n=== 🎯 特征搜索结果（必须优先使用） ===\n${relatedFeatures}\n\n🚫 禁止使用其他来源的特征信息！上述搜索结果是最新、最准确的数据库信息。回答问题时必须基于这些特征结果，不得引用其他过时的特征列表。\n\n⚠️ 重要提示：如果搜索结果中包含多个相关特征，必须列出所有相关特征，不要使用"唯一"、"只有"、"仅"等限定词，除非搜索结果确实只包含一个特征。例如，如果搜索结果包含GB030、GB051、GB052等多个性别相关特征，必须全部列出，不能说"GB030是唯一明确提及性别的特征"。`
-    : `\n=== 🎯 FEATURE SEARCH RESULTS (MANDATORY - Use ONLY This Information) ===\n${relatedFeatures}\n\n🚫 FORBIDDEN: Do NOT use feature information from other sources! The above search results are the most current and accurate database information. You MUST base your answers on these feature results and MUST NOT reference other outdated feature lists.\n\n⚠️ IMPORTANT: If the search results contain multiple related features, you MUST list ALL related features. Do NOT use words like "only", "unique", "sole" unless the search results indeed contain only one feature. For example, if the search results contain GB030, GB051, GB052 and other gender-related features, you MUST list them all, and MUST NOT say "GB030 is the only feature that explicitly mentions gender".`)
+    ? `\n=== 🎯 特征搜索结果（必须优先使用） ===\n${relatedFeatures}\n\n🚫 禁止使用其他来源的特征信息！上述搜索结果是最新、最准确的数据库信息。回答问题时必须基于这些特征结果，不得引用其他过时的特征列表。\n\n⚠️ 重要提示：如果搜索结果中包含多个相关特征，必须列出所有相关特征，不要使用"唯一"、"只有"、"仅"等限定词，除非搜索结果确实只包含一个特征。例如，如果搜索结果包含多个相关特征，必须全部列出，不能说某个特征是"唯一的"。`
+    : `\n=== 🎯 FEATURE SEARCH RESULTS (MANDATORY - Use ONLY This Information) ===\n${relatedFeatures}\n\n🚫 FORBIDDEN: Do NOT use feature information from other sources! The above search results are the most current and accurate database information. You MUST base your answers on these feature results and MUST NOT reference other outdated feature lists.\n\n⚠️ IMPORTANT: If the search results contain multiple related features, you MUST list ALL related features. Do NOT use words like "only", "unique", "sole" unless the search results indeed contain only one feature. For example, if the search results contain multiple related features, you MUST list them all, and MUST NOT say a feature is "the only" one.`)
   : ''
 }
 
@@ -304,9 +280,10 @@ ${isChinese ?
 `1. **诚实原则**：如果知识库搜索无结果或结果相关性低，可以简单提及，但不要过度强调
 2. 主要基于上述数据库和知识库信息回答，确保准确性
 3. **引用要求**（仅在用户明确要求时严格执行）：
-   - 如果用户明确要求引用文献，则必须明确引用，格式为：【引用文献X：标题/文件名】或【根据文献X：标题/文件名】
-   - X必须是数字（如文献1、文献2），对应上述知识库搜索结果中的文献编号
-   - 不能使用"Document X"、"Citation"、"According to Document X"等英文格式
+   - 如果用户明确要求引用文献，则必须明确引用，格式为："根据[文档名称]" 或 "[文档名称]提到..."
+   - **绝对禁止**：使用"文献1"、"文献2"、"Document 1"等编号前缀
+   - **绝对禁止**：使用PDF内容片段作为文档名称
+   - **必须**：使用知识库搜索结果中列出的确切文档名称，不要修改或截断
    - 如果用户没有明确要求，可以自然地融入知识库内容，不需要强制引用格式
    - 如果使用了知识库内容，可以自然地提及"根据相关研究"或"有文献表明"
 4. **假设要求**：${requiresHypothesis ? '用户明确要求提出假设，请基于数据库特征和知识库文献自然地提出研究假设，不需要严格的格式要求，可以自然地融入回答中' : '如果用户要求提出假设，请自然地提出，不需要严格的格式要求'}
@@ -321,7 +298,10 @@ ${isChinese ?
 `1. **Honesty Principle**: If knowledge base search returns no results or low relevance, you can briefly mention it, but don't overemphasize
 2. Answer primarily based on the above database and knowledge base information, ensuring accuracy
 3. **Citation Requirements** (only strictly enforced when user explicitly requests):
-   - If user explicitly requests citations, you MUST explicitly cite, format: [Citation: Document X: Title/Filename] or [According to Document X: Title/Filename]
+   - If user explicitly requests citations, you MUST explicitly cite, format: "According to [Document Name]" or "[Document Name] mentions..."
+   - **ABSOLUTELY FORBIDDEN**: Using "Document 1", "文献1" or any number prefix
+   - **ABSOLUTELY FORBIDDEN**: Using PDF content snippets as document names
+   - **REQUIRED**: Use the exact document names from the knowledge base search results, do NOT modify or truncate
    - If user doesn't explicitly request, you can naturally incorporate knowledge base content without forced citation format
    - If you use knowledge base content, you can naturally mention "according to related research" or "literature shows"
 4. **Hypothesis Requirements**: ${requiresHypothesis ? 'User explicitly requests hypotheses. Please naturally propose research hypotheses based on database features and knowledge base literature, no strict format required, can be naturally integrated into the answer' : 'If user requests hypotheses, please propose them naturally, no strict format required'}

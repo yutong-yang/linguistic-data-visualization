@@ -688,6 +688,111 @@ class LinguisticKnowledgeBase:
             logger.error(f"提取PDF文本失败 {pdf_path}: {e}")
             return ""
     
+    def extract_title_from_pdf(self, pdf_path: str) -> Optional[str]:
+        """从PDF文件中提取标题（优先使用元数据，必要时从内容提取）"""
+        try:
+            with open(pdf_path, 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
+                
+                # 1. 优先尝试从PDF元数据获取（最可靠）
+                if pdf_reader.metadata and pdf_reader.metadata.title:
+                    title = pdf_reader.metadata.title.strip()
+                    if title and len(title) > 5:
+                        # 验证标题是否合理（不是内容片段）
+                        if not title.startswith('(') and not title.endswith(')') and len(title) >= 10:
+                            logger.info(f"从PDF元数据提取标题: {title[:80]}...")
+                            return title
+                
+                # 2. 如果元数据没有，尝试从第一页提取标题（仅当文件名是DOI格式时使用）
+                if len(pdf_reader.pages) > 0:
+                    first_page_text = pdf_reader.pages[0].extract_text()
+                    if first_page_text:
+                        lines = first_page_text.split('\n')
+                        best_title = None
+                        best_score = 0
+                        
+                        # 查找可能的标题（通常在前几行，且较长）
+                        for i, line in enumerate(lines[:30]):  # 检查前30行
+                            line = line.strip()
+                            
+                            # 跳过空行和明显不是标题的行
+                            if not line or len(line) < 20:  # 标题至少20字符
+                                continue
+                            
+                            # 排除明显的非标题内容
+                            skip_patterns = [
+                                'abstract', 'keywords', 'introduction', 'doi:', 'http', '@',
+                                'page', 'volume', 'issue', 'pp.', 'pp ', 'pages',
+                                'received', 'accepted', 'published', 'copyright',
+                                'correspondence', 'email', 'address', 'journal',
+                                'series', 'companion', 'studies in', 'edited by'
+                            ]
+                            if any(pattern in line.lower() for pattern in skip_patterns):
+                                continue
+                            
+                            # 排除以括号开头或结尾的行（通常是系列名称、卷号等）
+                            if line.startswith('(') or line.endswith(')') or (line.startswith('[') and line.endswith(']')):
+                                continue
+                            
+                            # 排除明显的作者行（通常包含多个逗号或"and"）
+                            if ',' in line:
+                                parts = [p.strip() for p in line.split(',')]
+                                if len(parts) > 2:  # 可能是作者列表
+                                    continue
+                            
+                            # 排除包含明显作者名的行（如"Matti M"）
+                            if any(word in line.lower() for word in ['matti', 'et al', 'and', 'author']):
+                                # 但如果整行看起来像标题（长度足够，没有太多逗号），可能还是标题
+                                if ',' in line and len([p for p in line.split(',') if p.strip()]) > 2:
+                                    continue
+                            
+                            # 排除明显的机构名
+                            if any(word in line.lower() for word in ['university', 'institute', 'department', 'school', 'college', 'laboratory', 'lab']):
+                                continue
+                            
+                            # 排除页码和数字行
+                            if line.isdigit() or (len(line) < 20 and any(char.isdigit() for char in line[:3])):
+                                continue
+                            
+                            # 标题特征评分
+                            score = 0
+                            # 长度合理（30-200字符）加分（标题通常较长）
+                            if 30 <= len(line) <= 200:
+                                score += 15
+                            elif 20 <= len(line) < 30:
+                                score += 8
+                            # 首字母大写加分
+                            if line and line[0].isupper():
+                                score += 5
+                            # 在前5行加分（更可能是标题）
+                            if i < 5:
+                                score += 10
+                            elif i < 10:
+                                score += 5
+                            # 包含常见学术词汇加分
+                            if any(word in line.lower() for word in ['analysis', 'study', 'research', 'approach', 'method', 'system', 'model', 'perspective', 'cross-linguistic', 'linguistic']):
+                                score += 5
+                            # 不以数字开头加分
+                            if not line[0].isdigit():
+                                score += 2
+                            # 不包含括号加分（避免系列名称）
+                            if '(' not in line and '[' not in line:
+                                score += 5
+                            
+                            # 如果分数更高，更新最佳标题
+                            if score > best_score:
+                                best_title = line
+                                best_score = score
+                        
+                        if best_title and best_score >= 20:  # 提高阈值，至少要有较高分数
+                            logger.info(f"从PDF第一页提取标题: {best_title[:80]}...")
+                            return best_title
+                
+                return None
+        except Exception as e:
+            logger.warning(f"提取PDF标题失败 {pdf_path}: {e}")
+            return None
+    
     def process_csv_data(self, csv_path: str, collection_name: str = None) -> List[Dict]:
         """处理CSV数据，转换为文档格式"""
         try:

@@ -16,6 +16,7 @@ import httpx
 from knowledge_base import init_knowledge_base, get_knowledge_base, LinguisticKnowledgeBase
 from database_explorer import (
     search_feature_descriptions,
+    search_features_by_keywords,
     get_feature_statistics,
     clean_description,
     get_all_feature_ids
@@ -610,12 +611,40 @@ async def add_documents_batch(background_tasks: BackgroundTasks):
                     
                     text = knowledge_base.extract_text_from_pdf(file_path_str)
                     if text:
+                        filename_base = pdf_file.stem  # 不含扩展名的文件名
+                        is_doi_format = bool(filename_base and len(filename_base) > 10 and '-' in filename_base and any(c.isdigit() for c in filename_base))
+                        
+                        # 确定使用的标题（优先使用文件名，因为文件名通常就是论文标题）
+                        if is_doi_format:
+                            # 如果文件名是DOI格式（无意义的ID），尝试从PDF中提取标题
+                            extracted_title = knowledge_base.extract_title_from_pdf(file_path_str)
+                            if extracted_title:
+                                doc_title = extracted_title
+                                logger.info(f"  - DOI格式文件名，使用提取的标题: {doc_title}")
+                            else:
+                                # 提取失败，使用文件名
+                                doc_title = filename_base
+                                logger.warning(f"  - DOI格式文件名，无法提取标题，使用文件名: {doc_title}")
+                        else:
+                            # 文件名不是DOI格式，直接使用文件名作为标题（文件名通常就是论文标题）
+                            doc_title = filename_base
+                            logger.info(f"  - 使用文件名作为标题: {doc_title}")
+                            
+                            # 可选：验证文件名是否看起来像标题，如果不是，尝试从PDF提取
+                            # 如果文件名太短或包含特殊字符，可能是无意义的ID
+                            if len(filename_base) < 10 or filename_base.replace('_', '').replace('-', '').isdigit():
+                                extracted_title = knowledge_base.extract_title_from_pdf(file_path_str)
+                                if extracted_title and len(extracted_title) > len(filename_base):
+                                    doc_title = extracted_title
+                                    logger.info(f"  - 文件名看起来不像标题，使用提取的标题: {doc_title}")
+                        
                         documents = [{
                             "content": text,
                             "metadata": {
                                 "source": file_path_str,
                                 "type": "pdf",
                                 "filename": pdf_file.name,
+                                "title": doc_title,  # 添加提取的标题
                                 "processed_time": str(Path().cwd())
                             }
                         }]
@@ -840,6 +869,7 @@ class FeatureRecommendationRequest(BaseModel):
     feature_descriptions: Optional[Dict[str, Any]] = None
     n_kb_results: Optional[int] = 10
     api_provider: Optional[str] = "gemini"  # "gemini" 或 "qianwen"
+    lang: Optional[str] = "en"  # 用户界面语言 "en" 或 "zh"
 
 @app.post("/api/gemini/chat")
 async def gemini_chat(
@@ -895,7 +925,7 @@ async def gemini_chat(
             try:
                 data = response.json()
             except Exception as e:
-                logger.error(f"Failed to parse Gemini API response as JSON: {e}. Response text: {response.text[:500]}")
+                logger.error(f"Failed to parse Gemini API response as JSON: {e}. Response text: {response.text}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"Gemini API返回的不是有效的JSON格式: {str(e)}"
@@ -915,10 +945,10 @@ async def gemini_chat(
             
             # 如果所有格式都不匹配，记录完整的响应以便调试
             response_str = json.dumps(data, ensure_ascii=False, indent=2) if isinstance(data, (dict, list)) else str(data)
-            logger.error(f"Unexpected Gemini API response structure. Full response: {response_str[:1000]}")
+            logger.error(f"Unexpected Gemini API response structure. Full response: {response_str}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Gemini API返回格式异常。无法从响应中提取内容。响应结构: {response_str[:300]}"
+                detail=f"Gemini API返回格式异常。无法从响应中提取内容。响应结构: {response_str}"
             )
                 
     except httpx.TimeoutException:
@@ -995,7 +1025,7 @@ async def qianwen_chat(
             try:
                 data = response.json()
             except Exception as e:
-                logger.error(f"Failed to parse Qianwen API response as JSON: {e}. Response text: {response.text[:500]}")
+                logger.error(f"Failed to parse Qianwen API response as JSON: {e}. Response text: {response.text}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"千问API返回的不是有效的JSON格式: {str(e)}"
@@ -1054,10 +1084,10 @@ async def qianwen_chat(
             else:
                 # 如果所有格式都不匹配，记录完整的响应以便调试
                 response_str = json.dumps(data, ensure_ascii=False, indent=2) if isinstance(data, (dict, list)) else str(data)
-                logger.error(f"Unexpected Qianwen API response structure. Full response: {response_str[:1000]}")
+                logger.error(f"Unexpected Qianwen API response structure. Full response: {response_str}")
                 raise HTTPException(
                     status_code=500,
-                    detail=f"千问API返回格式异常。无法从响应中提取内容。响应结构: {response_str[:300]}"
+                    detail=f"千问API返回格式异常。无法从响应中提取内容。响应结构: {response_str}"
                 )
                 
     except httpx.TimeoutException:
@@ -1067,6 +1097,61 @@ async def qianwen_chat(
         raise HTTPException(status_code=500, detail=f"网络请求失败: {str(e)}")
     except Exception as e:
         logger.error(f"Qianwen API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"调用千问API时出错: {str(e)}")
+
+async def call_qianwen_api_for_recommendation(prompt: str, api_key: str) -> str:
+    """调用千问API用于特征推荐"""
+    try:
+        api_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+        
+        payload = {
+            "model": "qwen-turbo",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            },
+            "parameters": {
+                "temperature": 0.7,
+                "max_tokens": 2000
+            }
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                api_url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}"
+                },
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"千问API 请求失败: {response.text}"
+                )
+            
+            data = response.json()
+            
+            # 提取响应内容
+            if isinstance(data, dict) and data.get("output"):
+                output = data["output"]
+                if isinstance(output, dict):
+                    content = output.get("text")
+                    if content:
+                        return str(content)
+            
+            raise HTTPException(status_code=500, detail="千问API 返回格式异常")
+            
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="请求超时，请稍后重试")
+    except Exception as e:
+        logger.error(f"调用千问API时出错: {str(e)}")
         raise HTTPException(status_code=500, detail=f"调用千问API时出错: {str(e)}")
 
 async def call_gemini_api(prompt: str, api_key: str) -> str:
@@ -1150,8 +1235,15 @@ async def recommend_features(
 ):
     """特征推荐端点"""
     try:
+        logger.info("=" * 60)
+        logger.info("🔍 开始特征推荐流程")
+        logger.info(f"用户查询: {request.user_query}")
+        logger.info(f"API Provider: {request.api_provider or 'gemini'}")
+        logger.info(f"界面语言: {request.lang or 'en'}")
+        
         # 确定使用的 API provider
         api_provider = request.api_provider or "gemini"
+        user_lang = request.lang or "en"
         
         # 获取 API Key
         api_key = None
@@ -1180,82 +1272,169 @@ async def recommend_features(
                 )
         
         # 1. 获取数据库统计信息
+        logger.info("📊 步骤1: 获取数据库统计信息")
         stats = get_feature_statistics()
+        logger.info(f"  - Grambank特征数: {stats.get('totalGrambankFeatures', 0)}")
+        logger.info(f"  - D-PLACE特征数: {stats.get('totalDplaceFeatures', 0)}")
+        logger.info(f"  - WALS特征数: {stats.get('totalWalsFeatures', 0)}")
         
-        # 2. 搜索相关特征描述（CSV数据库）
-        search_results = search_feature_descriptions(request.user_query, 30)
+        # 2. 先进行简单的关键词匹配（优先展示直接包含关键词的特征）
+        logger.info("🔑 步骤2a: 关键词直接匹配（简单查找）")
+        keyword_matches = search_features_by_keywords(request.user_query, 30)
+        logger.info(f"  - 关键词匹配找到 {len(keyword_matches)} 个特征")
+        if len(keyword_matches) > 0:
+            logger.info(f"  - 前10个关键词匹配: {[f.get('id', '') for f in keyword_matches[:10]]}")
+        
+        # 2b. 搜索相关特征描述（CSV数据库）- 使用自然语言搜索，返回更多结果让LLM自己判断
+        logger.info("🔎 步骤2b: 搜索CSV数据库中的相关特征（自然语言搜索）")
+        semantic_search_results = search_feature_descriptions(request.user_query, 50)  # 增加搜索数量，让LLM有更多选择
+        logger.info(f"  - 语义搜索找到 {len(semantic_search_results)} 个相关特征")
+        if len(semantic_search_results) > 0:
+            logger.info(f"  - 前10个语义搜索结果: {[f.get('id', '') for f in semantic_search_results[:10]]}")
+        
+        # 合并结果：关键词匹配的特征优先，然后添加语义搜索结果中不重复的特征
+        keyword_match_ids = {f.get('id') for f in keyword_matches}
+        search_results = keyword_matches.copy()  # 先添加关键词匹配的结果
+        for feature in semantic_search_results:
+            if feature.get('id') not in keyword_match_ids:
+                search_results.append(feature)
+        
+        logger.info(f"  - 合并后总共 {len(search_results)} 个特征（{len(keyword_matches)} 个关键词匹配 + {len(semantic_search_results) - len([f for f in semantic_search_results if f.get('id') in keyword_match_ids])} 个语义搜索）")
         
         # 3. 搜索知识库（PDF文档）
+        logger.info("📚 步骤3: 搜索知识库（PDF文献）")
         knowledge_base_context = ""
         extracted_features = []
         
         if knowledge_base:
             try:
                 kb_results = knowledge_base.search(request.user_query, request.n_kb_results or 10)
+                logger.info(f"  - 知识库搜索结果数: {len(kb_results) if kb_results else 0}")
                 
                 if kb_results and len(kb_results) > 0:
-                    knowledge_base_context = "\n=== 知识库（PDF研究文献）相关内容 ===\n"
+                    kb_title = "知识库（PDF研究文献）相关内容" if user_lang == "zh" else "Knowledge Base (PDF Research Literature) Related Content"
+                    knowledge_base_context = f"\n=== {kb_title} ===\n"
+                    # 存储文档映射，用于后续引用
+                    document_mapping = {}
+                    
+                    # 第一步：先收集所有文档的标题，构建文档名称列表
                     for index, result in enumerate(kb_results[:10], 1):
                         document = result.get("document", {})
                         metadata = result.get("metadata") or document.get("metadata", {})
-                        content = result.get("content") or document.get("content", "")
-                        source_name = metadata.get("filename") or metadata.get("source") or "未知文档"
                         
-                        knowledge_base_context += f"\n**文献 {index}**: {source_name}\n"
-                        knowledge_base_context += f"**内容**: {content[:400]}{'...' if len(content) > 400 else ''}\n"
+                        # 完全依赖metadata中的title（文档添加时已提取并保存）
+                        doc_title = metadata.get("title")
+                        
+                        # 如果metadata中有title，直接使用（这是最可靠的）
+                        if doc_title and len(doc_title.strip()) >= 5:
+                            doc_title = doc_title.strip()
+                            # 排除明显的内容片段特征
+                            if (not doc_title.endswith('?') and 
+                                not doc_title.startswith('According to') and
+                                not doc_title.startswith('Document')):
+                                logger.debug(f"  - 文档 {index} 使用metadata中的title: {doc_title}")
+                                pass  # 使用metadata中的标题
+                            else:
+                                logger.warning(f"  - 文档 {index} metadata中的title看起来不合理，跳过: {doc_title}")
+                                doc_title = None
+                        
+                        # 如果metadata中没有title，使用文件名作为fallback
+                        if not doc_title or len(doc_title.strip()) < 5:
+                            doc_title = metadata.get("filename") or metadata.get("source") or ("未知文档" if user_lang == "zh" else "Unknown Document")
+                            # 提取文件名（去除路径）
+                            if "/" in doc_title:
+                                doc_title = doc_title.split("/")[-1]
+                            if "\\" in doc_title:
+                                doc_title = doc_title.split("\\")[-1]
+                            # 去除文件扩展名
+                            if doc_title.endswith(('.pdf', '.PDF', '.docx', '.DOCX', '.txt', '.TXT')):
+                                doc_title = doc_title.rsplit('.', 1)[0]
+                            
+                            if '-' in doc_title and len(doc_title) > 15 and any(c.isdigit() for c in doc_title):
+                                logger.warning(f"  - 文档 {index} 使用DOI格式文件名作为标题: {doc_title} (metadata中缺少title，建议重新添加文档)")
+                            else:
+                                logger.info(f"  - 文档 {index} 使用文件名作为标题: {doc_title} (metadata中缺少title)")
+                        
+                        # 确保doc_title不为空
+                        if not doc_title or len(doc_title.strip()) < 3:
+                            doc_title = f"文档 {index}" if user_lang == "zh" else f"Document {index}"
+                            logger.warning(f"  - 文档 {index} 无法获取标题，使用默认名称")
+                        
+                        document_mapping[index] = doc_title
+                    
+                    # 第二步：在展示内容之前，先展示文档名称列表和引用说明（重要！）
+                    if document_mapping:
+                        if user_lang == "zh":
+                            doc_list = "\n".join([f"  - 文献{idx}: {name}" for idx, name in document_mapping.items()])
+                            knowledge_base_context += f"\n**⚠️ 重要：文档名称列表（引用时必须使用这些确切名称）**：\n{doc_list}\n\n"
+                            knowledge_base_context += f"**引用格式要求（必须严格遵守）**：\n"
+                            knowledge_base_context += f"1. 引用文献时，直接使用文档名称，格式为：\"根据{list(document_mapping.values())[0] if document_mapping else '[文档名称]'}\" 或 \"{list(document_mapping.values())[1] if len(document_mapping) > 1 else '[文档名称]'}提到...\"\n"
+                            knowledge_base_context += f"2. **绝对禁止**：使用\"文献1\"、\"Document 1\"等编号前缀\n"
+                            knowledge_base_context += f"3. **绝对禁止**：使用PDF内容片段作为文档名称（如\"Studies in Language Companion Series\"或\"(Studies in Language Companion Series) Matti M\"是错误的）\n"
+                            knowledge_base_context += f"4. **必须**：使用文档名称列表中列出的确切名称，不要修改、截断或从内容中提取\n"
+                            knowledge_base_context += f"5. 正确示例：\"根据{list(document_mapping.values())[0] if document_mapping else '[文档名称]'}\" ✅\n"
+                            knowledge_base_context += f"6. 错误示例：\"根据文献1: {list(document_mapping.values())[0] if document_mapping else '[文档名称]'}\" ❌（不要使用编号）\n"
+                            knowledge_base_context += f"7. 错误示例：\"Document 1: Studies in Language Companion Series\" ❌（这是内容片段，不是文档名称）\n"
+                        else:
+                            doc_list = "\n".join([f"  - Document {idx}: {name}" for idx, name in document_mapping.items()])
+                            knowledge_base_context += f"\n**⚠️ IMPORTANT: Document Name List (MUST use these exact names when citing)**：\n{doc_list}\n\n"
+                            knowledge_base_context += f"**Citation Format Requirements (MUST strictly follow)**：\n"
+                            knowledge_base_context += f"1. When citing documents, directly use the document name, format: \"According to {list(document_mapping.values())[0] if document_mapping else '[Document Name]'}\" or \"{list(document_mapping.values())[1] if len(document_mapping) > 1 else '[Document Name]'} mentions...\"\n"
+                            knowledge_base_context += f"2. **ABSOLUTELY FORBIDDEN**: Using \"Document 1\", \"文献1\" or any number prefix\n"
+                            knowledge_base_context += f"3. **ABSOLUTELY FORBIDDEN**: Using PDF content snippets as document names (e.g., \"Studies in Language Companion Series\" or \"(Studies in Language Companion Series) Matti M\" is WRONG)\n"
+                            knowledge_base_context += f"4. **REQUIRED**: Use the exact names from the Document Name List, do NOT modify, truncate, or extract from content\n"
+                            knowledge_base_context += f"5. Correct example: \"According to {list(document_mapping.values())[0] if document_mapping else '[Document Name]'}\" ✅\n"
+                            knowledge_base_context += f"6. Wrong example: \"According to Document 1: {list(document_mapping.values())[0] if document_mapping else '[Document Name]'}\" ❌ (do not use number prefix)\n"
+                            knowledge_base_context += f"7. Wrong example: \"Document 1: Studies in Language Companion Series\" ❌ (this is a content snippet, not a document name)\n"
+                    
+                    # 第三步：展示文档内容（明确标注文档名称，避免混淆）
+                    for index, result in enumerate(kb_results[:10], 1):
+                        document = result.get("document", {})
+                        content = result.get("content") or document.get("content", "")
+                        source_name = document_mapping.get(index, f"文档 {index}" if user_lang == "zh" else f"Document {index}")
+                        
+                        doc_label = "文献" if user_lang == "zh" else "Document"
+                        content_label = "内容" if user_lang == "zh" else "Content"
+                        name_label = "文档名称" if user_lang == "zh" else "Document Name"
+                        
+                        # 明确标注：这是文档名称，不是内容
+                        knowledge_base_context += f"\n**{doc_label} {index}**\n"
+                        knowledge_base_context += f"**{name_label}**: {source_name}\n"
+                        knowledge_base_context += f"**{content_label}**: {content}\n"
                         knowledge_base_context += "\n---\n"
                     
-                    # 从知识库内容中提取特征ID
-                    extracted_features = extract_features_from_knowledge_base(kb_results)
-                    if extracted_features:
-                        knowledge_base_context += f"\n**从文献中提取的特征ID**: {', '.join(extracted_features[:15])}\n"
+                    # 打印文档映射信息到日志
+                    logger.info("  - 文档映射:")
+                    for doc_index, doc_name in document_mapping.items():
+                        logger.info(f"    文献{doc_index}: {doc_name}")
+                    
+                    # 不再从知识库内容中提取特征ID，因为：
+                    # 1. PDF原文中通常不包含Grambank/D-PLACE的特征ID（如GB051, GB054等）
+                    # 2. 如果提取，可能会误导LLM认为这些ID是文献中提到的
+                    # 3. 特征ID应该从数据库搜索结果中获取，而不是从PDF文献中提取
+                    # extracted_features = extract_features_from_knowledge_base(kb_results)
+                    # if extracted_features:
+                    #     features_label = "从文献中提取的特征ID" if user_lang == "zh" else "Feature IDs Extracted from Literature"
+                    #     knowledge_base_context += f"\n**{features_label}**: {', '.join(extracted_features[:15])}\n"
+                    # logger.info(f"  - 从知识库提取的特征ID: {extracted_features[:10]}")
             except Exception as e:
                 logger.warning(f"知识库搜索失败（不影响推荐）: {e}")
+        else:
+            logger.info("  - 知识库未初始化，跳过搜索")
         
-        # 4. 获取当前数据中的特征
-        current_features = []
-        if request.language_data:
-            import re
-            for lang in request.language_data:
-                for key in lang.keys():
-                    if (key.startswith('GB') or key.startswith('EA') or 'Richness' in key):
-                        if key.startswith('GB'):
-                            match = re.match(r'^GB(\d{3})$', key)
-                            if match:
-                                num = int(match.group(1))
-                                if num >= 20:
-                                    current_features.append(key)
-                        else:
-                            current_features.append(key)
-        
-        current_features = list(set(current_features))[:20]
-        
-        # 5. 构建数据样本
-        data_sample = ""
-        if request.language_data and len(request.language_data) > 0:
-            sample_langs = request.language_data[:5]
-            data_sample = "\n=== 数据样本 (5种语言) ===\n"
-            for lang in sample_langs:
-                name = lang.get('Name') or lang.get('name', '')
-                family = lang.get('Family_level_ID') or lang.get('family', '')
-                features_str = ', '.join([
-                    f"{k}={v}" for k, v in list(lang.items())[:10]
-                    if k not in ['Name', 'name', 'Family_level_ID', 'family']
-                ])
-                data_sample += f"{name} ({family}): {features_str}\n"
-        
-        # 6. 构建 LLM 提示
-        # 构建特征列表字符串
+        # 4. 构建 LLM 提示
+        logger.info("📝 步骤4: 构建LLM提示词")
+        # 构建特征列表字符串（自然语言格式，不强制排名）
+        category_label = "分类" if user_lang == "zh" else "Category"
+        desc_label = "描述" if user_lang == "zh" else "Description"
         features_text = "\n".join([
-            f"{feature.get('id', '')} ({feature.get('source', '')}): {feature.get('name', '')}\n  分类: {feature.get('category', '')}\n  描述: {clean_description(feature.get('description', ''))[:150]}..."
+            f"{feature.get('id', '')} ({feature.get('source', '')}): {feature.get('name', '')}\n  {category_label}: {feature.get('category', '')}\n  {desc_label}: {clean_description(feature.get('description', ''))}"
             for feature in search_results
         ])
         
-        current_features_text = ', '.join(current_features)
-        if len(current_features) > 20:
-            current_features_text += '...'
-        
-        prompt = f"""你是一位专业的语言学数据分析专家。现在你有机会探索完整的语言学数据库和知识库（研究文献）来为用户推荐最相关的特征。
+        # 根据语言构建不同的提示词
+        if user_lang == "zh":
+            prompt = f"""你是一位专业的语言学数据分析专家。现在你有机会探索完整的语言学数据库和知识库（研究文献）来为用户推荐最相关的特征。
 
 === 用户问题 ===
 {request.user_query}
@@ -1263,23 +1442,33 @@ async def recommend_features(
 === 完整数据库信息 ===
 Grambank数据库: {stats.get('totalGrambankFeatures', 0)} 个语法特征
 D-PLACE数据库: {stats.get('totalDplaceFeatures', 0)} 个社会文化特征
+WALS数据库: {stats.get('totalWalsFeatures', 0)} 个语言结构特征
 
-=== 搜索到的相关特征（CSV数据库）({len(search_results)}个) ===
+=== 数据库中的相关特征（共找到{len(search_results)}个） ===
+以下是从数据库中搜索到的可能与你的查询相关的特征。请仔细阅读每个特征的名称和描述，根据你的查询意图选择最相关的特征。
+
+**重要**：你只能从下面列出的特征中选择特征ID，不能自己编造特征ID。如果某个特征不在下面的列表中，即使它看起来相关，也不能使用。
+
 {features_text}
 {knowledge_base_context}
 
-=== 当前数据中的特征 ({len(current_features)}个) ===
-{current_features_text}
-{data_sample}
-
 === 任务 ===
-请分析用户问题，从完整数据库和知识库中推荐最相关的特征。你可以：
-1. 从搜索到的相关特征（CSV数据库）中选择
-2. 参考知识库（PDF文献）中提到的特征和研究发现
-3. 从当前数据中的特征中选择
-4. 推荐数据库中其他相关特征
+请仔细分析用户的问题，理解用户的查询意图，然后从以下来源推荐最相关的特征：
+1. **必须**：从上面搜索到的相关特征列表中选择特征ID。**绝对不能自己编造特征ID**，只能使用上面列表中实际存在的特征ID
+2. 如果知识库（PDF文献）中有相关研究，可以参考，但这不是必须的
+3. 如果上面搜索到的特征列表中没有足够相关的特征，**只能从列表中选择最相关的特征，即使数量较少也没关系**。不能编造不存在的特征ID
 
-请按以下JSON格式返回推荐：
+**重要**：
+- **所有特征ID必须来自上面提供的特征列表，不能自己编造**
+- 请根据特征的实际内容和你的查询意图来判断相关性，而不是简单地按顺序选择
+- 选择那些真正能回答用户问题的特征
+- 如果列表中没有完全匹配的特征，选择最接近的即可，但必须是列表中实际存在的特征ID
+
+**关于source字段**：
+- source字段必须填写特征的**实际来源数据库**，可以是"Grambank"、"D-PLACE"或"WALS"
+- 如果特征来自知识库文献的引用，source填写"Knowledge Base"
+
+请按以下JSON格式返回推荐（必须使用中文）：
 
 {{
   "recommendations": [
@@ -1287,57 +1476,189 @@ D-PLACE数据库: {stats.get('totalDplaceFeatures', 0)} 个社会文化特征
       "category": "特征分类名称",
       "name": "推荐组名称", 
       "description": "推荐理由",
-      "features": ["特征ID1", "特征ID2", "特征ID3"],
-      "reason": "为什么推荐这些特征（可以引用知识库中的研究发现）",
-      "source": "Grambank/D-PLACE/Knowledge Base/Current Data"
+      "features": ["特征ID", "特征ID", "特征ID"],
+      "reason": "为什么推荐这些特征（主要基于特征的实际内容和相关性。如果知识库中有相关研究，可以引用，但这不是必须的）。**重要**：如果引用知识库，直接使用文档名称，格式如\"根据[文档名称]\"，不要使用\"文献1\"、\"Document 1\"等编号前缀，不要使用PDF内容片段作为文档名称",
+      "source": "Grambank"、"D-PLACE"或"WALS"（根据特征ID判断，GB开头=Grambank，EA开头或其他=D-PLACE，数字+字母开头如1A=WALS）
     }}
   ]
 }}
 
+**重要：特征ID格式要求**：
+- features字段中的特征ID必须是纯ID格式，例如："GB051"、"EA046"、"52A"、"1A"等
+- **不要**在特征ID中添加后缀，例如：不要写成"52A (WALS)"或"GB051 (Grambank)"，只写"52A"或"GB051"即可
+- source字段会单独标注特征的来源数据库，不需要在特征ID中重复
+
 要求：
-1. 优先推荐搜索到的相关特征（CSV数据库）
-2. 如果知识库中有相关研究，可以参考并引用
-3. 确保推荐的特征在数据库中实际存在
-4. 考虑特征之间的关联性和互补性
-5. 提供清晰的推荐理由，可以结合知识库中的研究发现
-6. 标注特征来源（Grambank/D-PLACE/Knowledge Base/当前数据）"""
+1. 仔细理解用户的查询意图，选择真正能回答用户问题的特征
+2. **必须**从上面搜索到的特征列表中选择特征ID，不能自己编造特征ID。如果某个特征不在列表中，即使看起来相关也不能使用
+3. 从搜索到的特征列表中选择最相关的特征（不一定要按顺序，而是根据实际相关性）
+4. 如果知识库中有相关研究，可以参考并引用，但这不是必须的。如果知识库中没有相关内容，直接基于特征列表推荐即可
+5. **绝对禁止编造特征ID**。如果列表中没有足够相关的特征，就选择最相关的几个即可，即使数量较少也没关系。不能因为想要推荐更多特征而编造不存在的特征ID
+6. 考虑特征之间的关联性和互补性
+7. 提供清晰的推荐理由，如果知识库中有相关研究可以结合，但主要基于特征的实际内容和相关性
+8. 标注特征来源（Grambank/D-PLACE/WALS/Knowledge Base）
+9. 所有文本内容必须使用中文
+8. **引用格式要求（必须严格遵守）**：
+   - 引用知识库文献时，直接使用文档名称，格式示例："根据[文档名称]" 或 "[文档名称]提到..."
+   - **禁止**：使用"文献1"、"Document 1"等编号前缀
+   - **禁止**：使用PDF内容片段作为文档名称（如"Studies in Language Companion Series"是错误的）
+   - **必须**：使用文档名称列表中列出的确切名称，不要修改或截断"""
+        else:
+            prompt = f"""You are a professional linguistic data analysis expert. You now have the opportunity to explore the complete linguistic database and knowledge base (research literature) to recommend the most relevant features for the user.
+
+=== User Query ===
+{request.user_query}
+
+=== Complete Database Information ===
+Grambank Database: {stats.get('totalGrambankFeatures', 0)} grammatical features
+D-PLACE Database: {stats.get('totalDplaceFeatures', 0)} social-cultural features
+WALS Database: {stats.get('totalWalsFeatures', 0)} language structure features
+
+=== Related Features Found in Database ({len(search_results)} features found) ===
+The following features were found in the database that may be relevant to your query. Please carefully read each feature's name and description, and select the most relevant features based on your query intent.
+
+**IMPORTANT**: You can ONLY select feature IDs from the list below. Do NOT make up feature IDs. If a feature is not in the list below, you cannot use it even if it seems relevant.
+
+{features_text}
+{knowledge_base_context}
+
+=== Task ===
+Please carefully analyze the user's query, understand the query intent, and then recommend the most relevant features from the following sources:
+1. **MUST**: Select feature IDs from the related features list above. **DO NOT make up feature IDs**. You can ONLY use feature IDs that actually exist in the list above
+2. If there is relevant research in the knowledge base (PDF literature), you can reference it, but this is optional
+3. If there are not enough relevant features in the list above, **you can only select the most relevant features from the list, even if the number is small**. Do NOT make up non-existent feature IDs
+
+**Important**:
+- **All feature IDs MUST come from the feature list provided above. Do NOT make up feature IDs**
+- Please judge relevance based on the actual content of features and your understanding of the query intent, rather than simply selecting in order
+- Choose features that can truly answer the user's question
+- If there are no perfectly matching features in the list, select the closest ones, but they MUST be actual feature IDs from the list
+
+**About the source field**:
+- The source field must indicate the **actual source database** of the feature, which can be "Grambank", "D-PLACE", or "WALS"
+- If a feature is cited from knowledge base literature, use "Knowledge Base" as source
+
+Please return recommendations in the following JSON format (must use English):
+
+{{
+  "recommendations": [
+    {{
+      "category": "Feature Category Name",
+      "name": "Recommendation Group Name", 
+      "description": "Recommendation Reason",
+      "features": ["FeatureID", "FeatureID", "FeatureID"],
+      "reason": "Why these features are recommended (primarily based on the actual content and relevance of features. If there is relevant research in the knowledge base, you can cite it, but this is optional). **IMPORTANT**: If citing the knowledge base, directly use the document name, format like \"According to [Document Name]\", do NOT use \"Document 1\" or any number prefix, do NOT use PDF content snippets as document names",
+      "source": "Grambank", "D-PLACE", or "WALS" (determined by feature ID: GB prefix = Grambank, EA prefix or others = D-PLACE, number+letter like 1A = WALS)
+    }}
+  ]
+}}
+
+**IMPORTANT: Feature ID Format Requirements**:
+- Feature IDs in the features field must be in pure ID format, e.g., "GB051", "EA046", "52A", "1A", etc.
+- **DO NOT** add suffixes to feature IDs, e.g., do NOT write "52A (WALS)" or "GB051 (Grambank)", just write "52A" or "GB051"
+- The source field will separately label the feature's source database, no need to repeat it in the feature ID
+
+Requirements:
+1. Carefully understand the user's query intent and select features that can truly answer the user's question
+2. **MUST** select feature IDs from the search results list above. Do NOT make up feature IDs. If a feature is not in the list, you cannot use it even if it seems relevant
+3. Select the most relevant features from the search results list (not necessarily in order, but based on actual relevance)
+4. If there is relevant research in the knowledge base, you can reference and cite it, but this is optional. If there is no relevant content in the knowledge base, simply recommend based on the feature list
+5. **ABSOLUTELY FORBIDDEN to make up feature IDs**. If there are not enough relevant features in the list, just select the most relevant ones, even if the number is small. Do NOT make up non-existent feature IDs just because you want to recommend more features
+6. Consider relationships and complementarity between features
+7. Provide clear recommendation reasons, primarily based on the actual content and relevance of features. If there is relevant research in the knowledge base, you can combine it, but it's not required
+8. Label feature sources (must be "Grambank", "D-PLACE", "WALS", or "Knowledge Base" based on feature ID, not "Current Data")
+9. All text content must be in English
+8. **Citation Format Requirements (MUST strictly follow)**:
+   - When citing knowledge base documents, directly use the document name, format example: "According to [Document Name]" or "[Document Name] mentions..."
+   - **FORBIDDEN**: Using "Document 1", "文献1" or any number prefix
+   - **FORBIDDEN**: Using PDF content snippets as document names (e.g., "Studies in Language Companion Series" is WRONG)
+   - **REQUIRED**: Use the exact names from the Document Name List, do NOT modify or truncate them"""
         
-        # 7. 调用 LLM 获取推荐
+        logger.info(f"  - 提示词长度: {len(prompt)} 字符")
+        logger.info(f"  - 提示词完整内容:\n{prompt}")
+        
+        # 5. 调用 LLM 获取推荐
+        logger.info("🤖 步骤5: 调用LLM API获取推荐")
+        logger.info(f"  - 使用API: {api_provider}")
         if api_provider == "qianwen":
             response_text = await call_qianwen_api_for_recommendation(prompt, api_key)
         else:
             response_text = await call_gemini_api(prompt, api_key)
         
-        # 8. 解析响应
+        logger.info(f"  - LLM响应长度: {len(response_text)} 字符")
+        logger.info(f"  - LLM响应完整内容:\n{response_text}")
+        
+        # 6. 解析响应
+        logger.info("🔍 步骤6: 解析LLM响应")
         import re
         json_match = re.search(r'\{[\s\S]*\}', response_text)
         if json_match:
             try:
                 parsed = json.loads(json_match.group(0))
+                logger.info(f"  - 解析成功，找到 {len(parsed.get('recommendations', []))} 个推荐")
+                
                 if parsed.get("recommendations"):
                     # 验证特征是否存在
+                    logger.info("  - 验证特征有效性")
                     all_feature_ids = get_all_feature_ids()
                     valid_gb = set(all_feature_ids.get('grambank', []))
                     valid_ea = set(all_feature_ids.get('dplace', []))
+                    valid_wals = set(all_feature_ids.get('wals', []))
                     
-                    for rec in parsed["recommendations"]:
+                    for i, rec in enumerate(parsed["recommendations"]):
+                        original_count = len(rec.get("features", []))
                         valid_features = []
                         for feature_id in rec.get("features", []):
-                            if feature_id in valid_gb or feature_id in valid_ea or 'Richness' in feature_id:
-                                valid_features.append(feature_id)
+                            # 清理特征ID：移除可能的后缀如 "(WALS)", "(Grambank)", "(D-PLACE)" 等
+                            import re
+                            cleaned_id = re.sub(r'\s*\(WALS\)\s*$', '', feature_id, flags=re.IGNORECASE)
+                            cleaned_id = re.sub(r'\s*\(Grambank\)\s*$', '', cleaned_id, flags=re.IGNORECASE)
+                            cleaned_id = re.sub(r'\s*\(D-PLACE\)\s*$', '', cleaned_id, flags=re.IGNORECASE)
+                            cleaned_id = cleaned_id.strip()
+                            
+                            # 判断特征属于哪个数据库
+                            if cleaned_id in valid_gb:
+                                valid_features.append({'id': cleaned_id, 'source': 'Grambank'})
+                            elif cleaned_id in valid_ea:
+                                valid_features.append({'id': cleaned_id, 'source': 'D-PLACE'})
+                            elif cleaned_id in valid_wals:
+                                valid_features.append({'id': cleaned_id, 'source': 'WALS'})
+                            else:
+                                # 检查是否是D-PLACE的其他格式（CARNEIRO_, B前缀, SCCS, Richness等）
+                                is_dplace_other = (
+                                    cleaned_id.startswith('CARNEIRO_') or
+                                    cleaned_id.startswith('SCCS') or
+                                    'Richness' in cleaned_id or
+                                    (cleaned_id.startswith('B') and not cleaned_id.startswith('GB') and re.match(r'^B\d{1,4}$', cleaned_id)) or
+                                    re.match(r'^(Annual|Monthly|Net|Precipitation|Temperature|Biome|EcoRegion|Elevation|Slope|DistToCoast)', cleaned_id)
+                                )
+                                if is_dplace_other and cleaned_id in valid_ea:
+                                    # 这些特征在valid_ea中（因为load_dplace_variables会加载所有D-PLACE变量，包括CARNEIRO_, B等）
+                                    valid_features.append({'id': cleaned_id, 'source': 'D-PLACE'})
+                                else:
+                                    logger.warning(f"    - 无效特征ID: {feature_id} (清理后: {cleaned_id}, 不在任何数据库中，LLM可能编造了这个ID)")
                         rec["features"] = valid_features
+                        logger.info(f"    - 推荐 {i+1} ({rec.get('name', 'N/A')}): {original_count} -> {len(valid_features)} 个有效特征")
                     
                     # 过滤掉没有有效特征的推荐
+                    before_filter = len(parsed["recommendations"])
                     parsed["recommendations"] = [
                         rec for rec in parsed["recommendations"]
                         if len(rec.get("features", [])) > 0
                     ]
+                    after_filter = len(parsed["recommendations"])
+                    logger.info(f"  - 过滤后: {before_filter} -> {after_filter} 个推荐")
                     
+                    logger.info("✅ 特征推荐流程完成")
+                    logger.info("=" * 60)
                     return parsed
             except json.JSONDecodeError as e:
-                logger.warning(f"LLM响应解析失败: {e}")
+                logger.warning(f"  - LLM响应解析失败: {e}")
+                logger.warning(f"  - 响应完整内容:\n{response_text}")
         
         # 如果解析失败，返回空推荐
+        logger.warning("⚠️ 解析失败，返回空推荐")
+        logger.info("=" * 60)
         return {"recommendations": []}
         
     except HTTPException:

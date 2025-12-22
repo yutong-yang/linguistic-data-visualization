@@ -163,7 +163,7 @@ const zh = {
   loadingDataMessage: "⏳ 正在处理数据...",
   downloadSuccess: "成功下载 {count} 行静态数据",
   // 智能特征推荐相关
-  smartFeatureRecommendationsTitle: "🎯 智能特征推荐",
+  smartFeatureRecommendationsTitle: "特征推荐",
   aiSmartRecommendations: "AI智能推荐",
   enterResearchQuestionOrKeywords: "输入研究问题或关键词...",
   generateRecommendations: "生成推荐",

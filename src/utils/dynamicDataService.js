@@ -539,27 +539,36 @@ export async function buildDynamicData(selectedGBFeatures, selectedEAFeatures, s
             Soc_ID: langSocieties[0]?.id || ''
           };
           
-          // 添加GB特征值
+          // 添加GB特征值（确保所有选中的特征都出现在数据中，没有数据的设为'NA'）
           selectedGBFeatures.forEach(feature => {
             const value = langGbValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
+            } else {
+              // 即使没有数据，也要添加该特征字段，设为'NA'
+              dataPoint[feature] = 'NA';
             }
           });
           
-          // 添加EA特征值
+          // 添加EA特征值（确保所有选中的特征都出现在数据中，没有数据的设为'NA'）
           selectedEAFeatures.forEach(feature => {
             const value = eaFeatureValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
+            } else {
+              // 即使没有数据，也要添加该特征字段，设为'NA'
+              dataPoint[feature] = 'NA';
             }
           });
           
-          // 添加WALS特征值
+          // 添加WALS特征值（确保所有选中的特征都出现在数据中，没有数据的设为'NA'）
           selectedWALSFeatures.forEach(feature => {
             const value = walsFeatureValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
+            } else {
+              // 即使没有数据，也要添加该特征字段，设为'NA'
+              dataPoint[feature] = 'NA';
             }
           });
           
@@ -580,27 +589,36 @@ export async function buildDynamicData(selectedGBFeatures, selectedEAFeatures, s
             Soc_ID: langSocieties[0]?.id || ''
           };
           
-          // 添加GB特征值（如果有的话）
+          // 添加GB特征值（确保所有选中的特征都出现在数据中，没有数据的设为'NA'）
           selectedGBFeatures.forEach(feature => {
             const value = langGbValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
+            } else {
+              // 即使没有数据，也要添加该特征字段，设为'NA'
+              dataPoint[feature] = 'NA';
             }
           });
           
-          // 添加EA特征值（如果有的话）
+          // 添加EA特征值（确保所有选中的特征都出现在数据中，没有数据的设为'NA'）
           selectedEAFeatures.forEach(feature => {
             const value = eaFeatureValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
+            } else {
+              // 即使没有数据，也要添加该特征字段，设为'NA'
+              dataPoint[feature] = 'NA';
             }
           });
           
-          // 添加WALS特征值（如果有的话）
+          // 添加WALS特征值（确保所有选中的特征都出现在数据中，没有数据的设为'NA'）
           selectedWALSFeatures.forEach(feature => {
             const value = walsFeatureValues[feature];
             if (value !== undefined && value !== 'NA' && value !== null && value !== '') {
               dataPoint[feature] = value;
+            } else {
+              // 即使没有数据，也要添加该特征字段，设为'NA'
+              dataPoint[feature] = 'NA';
             }
           });
           

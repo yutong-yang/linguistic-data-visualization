@@ -14,7 +14,7 @@ import { loadCombinedFamilyMapping, getFamilyName } from '../utils/familyMapping
 const MapView = () => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const { languageData, filteredLanguageData, loading, selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures, gbWeights, eaWeights, walsWeights, showFeatureInfo, highlightedLanguages, dorecoHighlightedLanguages, featureDescriptions, categoricalFilters } = useContext(DataContext);
+  const { languageData, filteredLanguageData, loading, selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures, gbWeights, eaWeights, walsWeights, showFeatureInfo, highlightedLanguages, dorecoHighlightedLanguages, featureDescriptions, categoricalFilters, lang: currentLang } = useContext(DataContext);
   const markersRef = useRef([]);
   const currentZoomRef = useRef(2);
   const phylogeneticTreeRef = useRef(null);
@@ -168,37 +168,49 @@ const MapView = () => {
     const extraSpace = maxBorderLayers > 0 ? maxBorderLayers * 2 + 4 : 0;
     const svgSize = Math.ceil(radius * 2.2 + extraSpace * 2);
 
-    // 构建EA特征显示内容
+    // 构建EA特征显示内容 - 只显示数据中实际存在的特征
     const eaFeaturesHtml = selectedEAFeatures && selectedEAFeatures.length > 0 
-      ? selectedEAFeatures.map((feature, idx) => {
-          const value = lang[feature];
-          let displayValue = value !== undefined && value !== null ? value : 'N/A';
-          const featureInfo = featureDescriptions[feature];
-          const featureType = featureInfo?.type ? `[${featureInfo.type}]` : '';
-          
-          // 对于EA特征，尝试查找code描述
-          if (value !== undefined && value !== null && value !== 'N/A' && value !== '') {
-            const codeId = `${feature}-${value}`;
-            const codeInfo = eaCodesRef.current[codeId];
-            if (codeInfo) {
-              displayValue = `${value} (${codeInfo.name})`;
+      ? selectedEAFeatures
+          .filter(feature => {
+            // 只显示数据中实际存在的特征
+            const value = lang[feature];
+            return value !== undefined && value !== null && value !== '' && value !== 'NA';
+          })
+          .map((feature, idx) => {
+            const value = lang[feature];
+            let displayValue = value;
+            const featureInfo = featureDescriptions[feature];
+            const featureType = featureInfo?.type ? `[${featureInfo.type}]` : '';
+            
+            // 对于EA特征，尝试查找code描述
+            if (value !== undefined && value !== null && value !== '') {
+              const codeId = `${feature}-${value}`;
+              const codeInfo = eaCodesRef.current[codeId];
+              if (codeInfo) {
+                displayValue = `${value} (${codeInfo.name})`;
+              }
             }
-          }
-          return `<span style='cursor:pointer;color:#ff6b35;text-decoration:underline' data-feature='${feature}'>${feature}</span> ${featureType}: ${displayValue}<br/>`;
-        }).join('')
+            return `<span style='cursor:pointer;color:#ff6b35;text-decoration:underline' data-feature='${feature}'>${feature}</span> ${featureType}: ${displayValue}<br/>`;
+          }).join('')
       : '';
     
-    // 构建WALS特征显示内容
+    // 构建WALS特征显示内容 - 只显示数据中实际存在的特征
     const walsFeaturesHtml = selectedWALSFeatures && selectedWALSFeatures.length > 0
-      ? selectedWALSFeatures.map(feature => {
-          const value = lang[feature];
-          let displayValue = value !== undefined ? value : 'N/A';
-          // 如果有codes描述，添加到显示中
-          if (value && walsCodesRef.current[value]) {
-            displayValue = `${value} (${walsCodesRef.current[value].name})`;
-          }
-          return `<span style='cursor:pointer;color:#4ecdc4;text-decoration:underline' data-feature='${feature}'>${feature}</span>: ${displayValue}<br/>`;
-        }).join('')
+      ? selectedWALSFeatures
+          .filter(feature => {
+            // 只显示数据中实际存在的特征
+            const value = lang[feature];
+            return value !== undefined && value !== null && value !== '' && value !== 'NA';
+          })
+          .map(feature => {
+            const value = lang[feature];
+            let displayValue = value;
+            // 如果有codes描述，添加到显示中
+            if (value && walsCodesRef.current[value]) {
+              displayValue = `${value} (${walsCodesRef.current[value].name})`;
+            }
+            return `<span style='cursor:pointer;color:#4ecdc4;text-decoration:underline' data-feature='${feature}'>${feature}</span>: ${displayValue}<br/>`;
+          }).join('')
       : '';
     
     // 弹窗内容，特征名可点击
@@ -211,19 +223,23 @@ const MapView = () => {
       <hr style="margin: 5px 0; border: none; border-top: 1px solid #ccc;">
       
       ${featureData.length > 0 ? '<b>GB Features:</b><br/>' : ''}
-      ${featureData.map(f => {
-        const value = lang[f.feature];
-        let displayValue = value !== undefined && value !== null ? value : 'N/A';
-        // GB特征值：0=absent, 1=present
-        if (value === 0 || value === '0') {
-          displayValue = '0 (absent)';
-        } else if (value === 1 || value === '1') {
-          displayValue = '1 (present)';
-        } else if (value !== 'N/A' && value !== undefined && value !== null && value !== '') {
-          displayValue = value; // 其他值直接显示
-        }
-        return `<span style='cursor:pointer;color:#2c7c6c;text-decoration:underline' data-feature='${f.feature}'>${f.feature}</span>: ${displayValue}<br/>`;
-      }).join('')}
+      ${featureData
+        .filter(f => {
+          // 只显示数据中实际存在的特征（值不是undefined、null或空字符串）
+          const value = lang[f.feature];
+          return value !== undefined && value !== null && value !== '';
+        })
+        .map(f => {
+          const value = lang[f.feature];
+          let displayValue = value;
+          // GB特征值：0=absent, 1=present
+          if (value === 0 || value === '0') {
+            displayValue = '0 (absent)';
+          } else if (value === 1 || value === '1') {
+            displayValue = '1 (present)';
+          }
+          return `<span style='cursor:pointer;color:#2c7c6c;text-decoration:underline' data-feature='${f.feature}'>${f.feature}</span>: ${displayValue}<br/>`;
+        }).join('')}
       
       ${eaFeaturesHtml ? '<b>D-PLACE Features:</b><br/>' + eaFeaturesHtml : ''}
       
@@ -240,7 +256,7 @@ const MapView = () => {
         font-size: 12px;
         width: 100%;
         margin-top: 5px;
-      ">💬 获取AI讲解</button>
+      ">💬 ${currentLang === 'zh' ? '获取AI讲解' : 'Get AI Explanation'}</button>
     `;
 
     if (featureData.length === 1) {
@@ -519,7 +535,9 @@ const MapView = () => {
 
     // 创建新的地图实例
     try {
-      mapInstanceRef.current = L.map('map').setView([10, 0], 2);
+      mapInstanceRef.current = L.map('map', {
+        zoomControl: false  // 禁用默认的缩放控件
+      }).setView([10, 0], 2);
       
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO'
@@ -629,16 +647,19 @@ const MapView = () => {
         });
         sizeValue = totalWeight > 0 ? sizeValue / totalWeight : 0;
 
-        // 构造饼图数据
+        // 构造饼图数据 - 只包含数据中实际存在的特征
         const featureData = allGB.map(feature => {
           const w = parseFloat(gbWeights[feature] || 1);
+          const value = lang[feature];
+          // 只包含值存在的特征（不是undefined、null或空字符串）
+          const hasValue = value !== undefined && value !== null && value !== '';
           return {
             feature,
-            value: lang[feature],
+            value: value,
             isOrange: gbOrangeFeatures.includes(feature),
-            weight: w > 0 ? w : 0
+            weight: (w > 0 && hasValue) ? w : 0
           };
-        }).filter(f => f.weight > 0);
+        }).filter(f => f.weight > 0 && f.value !== undefined && f.value !== null && f.value !== '');
 
         // 检查是否高亮
         const isTreeHighlighted = highlightedLanguages.includes(lang.Name);

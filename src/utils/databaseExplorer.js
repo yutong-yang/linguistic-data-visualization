@@ -38,12 +38,6 @@ export async function loadGrambankParameters() {
     
     cachedParameters = parameters;
     
-    // 特别查找GB057来调试
-    const gb057 = parameters.find(p => p.id === 'GB057');
-    if (gb057) {
-    } else {
-    }
-    
     return parameters;
   } catch (error) {
     console.error('Failed to load Grambank parameters:', error);
@@ -180,15 +174,8 @@ export async function searchFeatureDescriptions(query, limit = 20) {
         word.length > 2 && searchText.includes(word)
       );
       
-      // 特殊处理：如果查询包含"性别"或"gender"，也匹配分类为"Gender_or_Noun_Class"的特征
-      const isGenderQuery = queryLower.includes('性别') || queryLower.includes('gender');
-      const isGenderCategory = param.category && (
-        param.category.toLowerCase().includes('gender') || 
-        param.category.toLowerCase().includes('noun class') ||
-        param.category === '1'  // Gender_or_Noun_Class分类标记为1
-      );
-      
-      return originalMatch || expandedMatch || (isGenderQuery && isGenderCategory);
+      // 使用统一的匹配逻辑，不进行特殊处理
+      return originalMatch || expandedMatch;
     }).slice(0, limit);
     
     if (gbMatches.length > 0) {
@@ -335,43 +322,3 @@ export async function validateFeatureId(featureId) {
   const allIds = await getAllFeatureIds();
   return allIds.all.includes(featureId);
 }
-
-// 获取地理分布信息
-export async function getGeographicDistribution() {
-  try {
-    // 这里应该实现真正的地理分布分析
-    // 目前返回模拟数据
-    return {
-      regions: ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania'],
-      features: ['GB030', 'GB051', 'GB079', 'GB080'],
-      patterns: [
-        { region: 'Europe', feature: 'GB030', frequency: 0.85 },
-        { region: 'Asia', feature: 'GB051', frequency: 0.72 },
-        { region: 'Africa', feature: 'GB079', frequency: 0.68 }
-      ]
-    };
-  } catch (error) {
-    console.error('获取地理分布失败:', error);
-    return { regions: [], features: [], patterns: [] };
-  }
-}
-
-// 获取语言家族比较
-export async function getFamilyComparison() {
-  try {
-    // 这里应该实现真正的语言家族比较
-    // 目前返回模拟数据
-    return {
-      families: ['Indo-European', 'Sino-Tibetan', 'Niger-Congo', 'Austronesian'],
-      features: ['GB030', 'GB051', 'GB079', 'GB080'],
-      differences: [
-        { family: 'Indo-European', feature: 'GB030', value: 0.9 },
-        { family: 'Sino-Tibetan', feature: 'GB051', value: 0.8 },
-        { family: 'Niger-Congo', feature: 'GB079', value: 0.7 }
-      ]
-    };
-  } catch (error) {
-    console.error('获取语言家族比较失败:', error);
-    return { families: [], features: [], differences: [] };
-  }
-} 

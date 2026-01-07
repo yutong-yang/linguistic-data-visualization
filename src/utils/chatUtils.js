@@ -203,18 +203,29 @@ async function buildPrompt(userMessage, lang = 'en') {
       });
       
       if (relevantResults.length > 0) {
-        knowledgeContext = `\n=== 知识库搜索结果（必须明确引用） ===\n${relevantResults.map((result) => {
+        // 为每个结果添加编号，方便引用
+        const resultsWithIndex = relevantResults.map((result, index) => ({
+          ...result,
+          index: index + 1
+        }));
+        
+        knowledgeContext = `\n=== 知识库搜索结果（必须明确引用原文） ===\n${resultsWithIndex.map((result) => {
           const filename = result.metadata?.filename || result.metadata?.source || '未知文档';
           const title = result.metadata?.title || filename;
-          const content = result.content?.substring(0, 800) || '无内容';
-          return `**文档名称**: ${title}\n**来源**: ${filename}\n**内容**: ${content}${result.content && result.content.length > 800 ? '...' : ''}`;
-        }).join('\n\n---\n\n')}\n\n⚠️ **引用格式要求（必须严格遵守）**：
-1. 引用时直接使用文档名称，格式为："根据[文档名称]" 或 "[文档名称]提到..."
-2. **绝对禁止**：使用"文献1"、"文献2"、"Document 1"等编号前缀
-3. **绝对禁止**：使用PDF内容片段作为文档名称
-4. **必须**：使用上述文档名称列表中列出的确切名称，不要修改或截断
-5. 正确示例："根据${relevantResults[0]?.metadata?.title || relevantResults[0]?.metadata?.filename || '[文档名称]'}" ✅
-6. 错误示例："根据文献1: ${relevantResults[0]?.metadata?.title || '[文档名称]'}" ❌（不要使用编号）`;
+          // 增加内容长度，让 AI 能看到更多原文
+          const content = result.content?.substring(0, 1200) || '无内容';
+          return `**文档 ${result.index} - 文档名称**: ${title}\n**来源**: ${filename}\n**原文内容**: ${content}${result.content && result.content.length > 1200 ? '...' : ''}`;
+        }).join('\n\n---\n\n')}\n\n⚠️ **引用格式要求（必须严格遵守，支持溯源）**：
+1. **直接引用原文**（推荐）：使用引号引用原文，格式为："[文档名称]指出：'原文内容'" 或 "根据[文档名称]，'原文内容'"
+2. **间接引用**：格式为："根据[文档名称]" 或 "[文档名称]提到..." 或 "[文档名称]认为..."
+3. **必须包含文档名称**：每次引用都必须明确标注文档名称，格式为："根据[文档名称]"
+4. **绝对禁止**：使用"文献1"、"文献2"、"Document 1"等编号前缀
+5. **绝对禁止**：使用PDF内容片段作为文档名称
+6. **必须**：使用上述文档名称列表中列出的确切名称，不要修改或截断
+7. **溯源要求**：如果引用了知识库内容，必须明确标注来源，让用户可以溯源到具体文档
+8. 正确示例（直接引用）："根据${resultsWithIndex[0]?.metadata?.title || resultsWithIndex[0]?.metadata?.filename || '[文档名称]'}，'原文内容'" ✅
+9. 正确示例（间接引用）："根据${resultsWithIndex[0]?.metadata?.title || resultsWithIndex[0]?.metadata?.filename || '[文档名称]'}，..." ✅
+10. 错误示例："根据文献1: ${resultsWithIndex[0]?.metadata?.title || '[文档名称]'}" ❌（不要使用编号）`;
       } else {
         knowledgeContext = '\n=== 知识库搜索无相关结果 ===\n注意：虽然找到了一些文档片段，但相关性较低，可能无法准确回答您的问题。';
       }
@@ -279,13 +290,14 @@ ${userMessage}
 ${isChinese ? 
 `1. **诚实原则**：如果知识库搜索无结果或结果相关性低，可以简单提及，但不要过度强调
 2. 主要基于上述数据库和知识库信息回答，确保准确性
-3. **引用要求**（仅在用户明确要求时严格执行）：
-   - 如果用户明确要求引用文献，则必须明确引用，格式为："根据[文档名称]" 或 "[文档名称]提到..."
+3. **引用要求**（必须明确引用，支持溯源）：
+   - **必须引用原文**：如果使用了知识库内容，必须明确引用，格式为："根据[文档名称]，'原文内容'" 或 "[文档名称]指出：'原文内容'"
+   - **直接引用优先**：尽量使用直接引用（带引号的原文），这样用户可以溯源到具体内容
+   - **必须包含文档名称**：每次引用都必须明确标注文档名称，让用户可以溯源
    - **绝对禁止**：使用"文献1"、"文献2"、"Document 1"等编号前缀
    - **绝对禁止**：使用PDF内容片段作为文档名称
    - **必须**：使用知识库搜索结果中列出的确切文档名称，不要修改或截断
-   - 如果用户没有明确要求，可以自然地融入知识库内容，不需要强制引用格式
-   - 如果使用了知识库内容，可以自然地提及"根据相关研究"或"有文献表明"
+   - **溯源要求**：如果引用了知识库内容，必须明确标注来源，格式如："根据[文档名称]，'原文内容'"，让用户可以溯源到具体文档和原文
 4. **假设要求**：${requiresHypothesis ? '用户明确要求提出假设，请基于数据库特征和知识库文献自然地提出研究假设，不需要严格的格式要求，可以自然地融入回答中' : '如果用户要求提出假设，请自然地提出，不需要严格的格式要求'}
 5. **回答要求**：
    - 自然流畅，根据问题复杂度调整长度，不要强制限制字数
@@ -297,13 +309,14 @@ ${isChinese ?
 : 
 `1. **Honesty Principle**: If knowledge base search returns no results or low relevance, you can briefly mention it, but don't overemphasize
 2. Answer primarily based on the above database and knowledge base information, ensuring accuracy
-3. **Citation Requirements** (only strictly enforced when user explicitly requests):
-   - If user explicitly requests citations, you MUST explicitly cite, format: "According to [Document Name]" or "[Document Name] mentions..."
+3. **Citation Requirements** (MUST cite with traceability):
+   - **MUST cite original text**: If you use knowledge base content, you MUST explicitly cite, format: "According to [Document Name], 'original text'" or "[Document Name] states: 'original text'"
+   - **Direct quotes preferred**: Try to use direct quotes (original text in quotes) so users can trace back to specific content
+   - **MUST include document name**: Every citation must clearly label the document name for traceability
    - **ABSOLUTELY FORBIDDEN**: Using "Document 1", "文献1" or any number prefix
    - **ABSOLUTELY FORBIDDEN**: Using PDF content snippets as document names
    - **REQUIRED**: Use the exact document names from the knowledge base search results, do NOT modify or truncate
-   - If user doesn't explicitly request, you can naturally incorporate knowledge base content without forced citation format
-   - If you use knowledge base content, you can naturally mention "according to related research" or "literature shows"
+   - **Traceability requirement**: If you cite knowledge base content, you MUST clearly label the source, format like "According to [Document Name], 'original text'", so users can trace back to the specific document and original text
 4. **Hypothesis Requirements**: ${requiresHypothesis ? 'User explicitly requests hypotheses. Please naturally propose research hypotheses based on database features and knowledge base literature, no strict format required, can be naturally integrated into the answer' : 'If user requests hypotheses, please propose them naturally, no strict format required'}
 5. **Response Requirements**:
    - Natural and fluent, adjust length based on question complexity, don't force word limits

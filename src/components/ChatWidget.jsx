@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
 import { DataContext } from '../context/DataContext';
 import { callAIAPI, addChatToHistory, checkAPIStatus, clearChatHistory, getChatHistory } from '../utils/chatUtils';
 import { gbFeatures, gbOrangeFeatures, eaFeatures } from '../utils/featureData';
@@ -10,6 +10,10 @@ const ChatWidget = ({ onShowApiKeyModal }) => {
     featureDescriptions,
     selectedEAFeatures,
     selectedGBFeatures,
+    selectedWALSFeatures,
+    setSelectedEAFeatures,
+    setSelectedGBFeatures,
+    setSelectedWALSFeatures,
     lang,
     langs
   } = useContext(DataContext);
@@ -32,6 +36,290 @@ const ChatWidget = ({ onShowApiKeyModal }) => {
 
   // Chat suggestions now come from the language pack
   const suggestions = langs[lang].suggestions;
+
+  // 从文本中提取特征ID
+  const extractFeatureIds = (text) => {
+    if (!text) return [];
+    const features = new Set();
+    
+    // 提取GB特征 (GB001-GB999)
+    const gbMatches = text.match(/\bGB\d{3}\b/gi);
+    if (gbMatches) {
+      gbMatches.forEach(match => {
+        const num = parseInt(match.substring(2));
+        if (num >= 20 && num <= 999) {
+          features.add({ id: match.toUpperCase(), type: 'gb' });
+        }
+      });
+    }
+    
+    // 提取EA特征 (EA001-EA999)
+    const eaMatches = text.match(/\bEA\d{3}\b/gi);
+    if (eaMatches) {
+      eaMatches.forEach(match => {
+        features.add({ id: match.toUpperCase(), type: 'ea' });
+      });
+    }
+    
+    // 提取WALS特征 (数字+字母，如1A, 2A, 52A等)
+    const walsMatches = text.match(/\b\d+[A-Z]\b/g);
+    if (walsMatches) {
+      walsMatches.forEach(match => {
+        features.add({ id: match.toUpperCase(), type: 'wals' });
+      });
+    }
+    
+    // 提取其他D-PLACE特征
+    const dplacePatterns = [
+      /\bCARNEIRO_\w+\b/gi,
+      /\bSCCS\d+\b/gi,
+      /\bB\d{1,4}\b/g, // Binford特征
+      /\b\w+Richness\b/gi, // Richness特征
+      /\b(Annual|Monthly|Net|Precipitation|Temperature|Biome|EcoRegion|Elevation|Slope|DistToCoast)\w*\b/gi
+    ];
+    
+    dplacePatterns.forEach(pattern => {
+      const matches = text.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          // 排除GB开头的
+          if (!match.toUpperCase().startsWith('GB')) {
+            features.add({ id: match, type: 'ea' });
+          }
+        });
+      }
+    });
+    
+    return Array.from(features);
+  };
+
+  // 切换特征选择（添加或删除）
+  const toggleFeatureSelection = useCallback((featureId, featureType, currentIsSelected) => {
+    if (featureType === 'gb') {
+      if (currentIsSelected) {
+        // 删除
+        setSelectedGBFeatures(prev => prev.filter(f => f !== featureId));
+        return { action: 'removed', wasSelected: true };
+      } else {
+        // 添加
+        setSelectedGBFeatures(prev => {
+          // 再次检查，避免重复添加
+          if (prev.includes(featureId)) {
+            return prev;
+          }
+          return [...prev, featureId];
+        });
+        return { action: 'added', wasSelected: false };
+      }
+    } else if (featureType === 'ea') {
+      if (currentIsSelected) {
+        // 删除
+        setSelectedEAFeatures(prev => prev.filter(f => f !== featureId));
+        return { action: 'removed', wasSelected: true };
+      } else {
+        // 添加
+        setSelectedEAFeatures(prev => {
+          // 再次检查，避免重复添加
+          if (prev.includes(featureId)) {
+            return prev;
+          }
+          return [...prev, featureId];
+        });
+        return { action: 'added', wasSelected: false };
+      }
+    } else if (featureType === 'wals') {
+      if (currentIsSelected) {
+        // 删除
+        setSelectedWALSFeatures(prev => prev.filter(f => f !== featureId));
+        return { action: 'removed', wasSelected: true };
+      } else {
+        // 添加
+        setSelectedWALSFeatures(prev => {
+          // 再次检查，避免重复添加
+          if (prev.includes(featureId)) {
+            return prev;
+          }
+          return [...prev, featureId];
+        });
+        return { action: 'added', wasSelected: false };
+      }
+    }
+    return { action: 'none', wasSelected: false };
+  }, []);
+
+  // 处理AI消息中的特征ID，将其转换为可点击按钮
+  useEffect(() => {
+    const processFeatureIds = () => {
+      const messageContainers = document.querySelectorAll('.ai-message-content[data-processed="false"]');
+      messageContainers.forEach(container => {
+        const text = container.textContent || '';
+        const features = extractFeatureIds(text);
+        
+        if (features.length === 0) {
+          container.dataset.processed = 'true';
+          return;
+        }
+        
+        // 使用 TreeWalker 遍历文本节点，更安全地替换
+        const walker = document.createTreeWalker(
+          container,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: (node) => {
+              // 跳过代码块和按钮内的文本
+              let parent = node.parentElement;
+              while (parent && parent !== container) {
+                if (parent.tagName === 'CODE' || 
+                    parent.tagName === 'PRE' || 
+                    parent.classList.contains('feature-select-btn') ||
+                    parent.closest('code') ||
+                    parent.closest('pre') ||
+                    parent.closest('.feature-select-btn')) {
+                  return NodeFilter.FILTER_REJECT;
+                }
+                parent = parent.parentElement;
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            }
+          },
+          false
+        );
+        
+        const textNodes = [];
+        let node;
+        while (node = walker.nextNode()) {
+          textNodes.push(node);
+        }
+        
+        // 处理每个文本节点
+        textNodes.forEach(textNode => {
+          const originalText = textNode.textContent;
+          let processedText = originalText;
+          const replacements = [];
+          
+          // 为每个特征找到所有匹配位置
+          features.forEach(feature => {
+            const regex = new RegExp(`\\b${feature.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+            let match;
+            const processedIndices = new Set(); // 跟踪已处理的索引位置，避免重复
+            
+            while ((match = regex.exec(originalText)) !== null) {
+              const matchKey = `${match.index}-${match.index + match[0].length}`;
+              
+              // 检查是否已经被其他特征替换过，或已经处理过这个位置
+              const alreadyReplaced = replacements.some(r => 
+                match.index >= r.start && match.index < r.end
+              );
+              
+              if (!alreadyReplaced && !processedIndices.has(matchKey)) {
+                processedIndices.add(matchKey);
+                
+                const isSelected = 
+                  (feature.type === 'gb' && selectedGBFeatures.includes(feature.id)) ||
+                  (feature.type === 'ea' && selectedEAFeatures.includes(feature.id)) ||
+                  (feature.type === 'wals' && selectedWALSFeatures.includes(feature.id));
+                
+                replacements.push({
+                  start: match.index,
+                  end: match.index + match[0].length,
+                  feature: feature,
+                  isSelected: isSelected
+                });
+              }
+            }
+          });
+          
+          // 按位置排序，从前往后处理
+          replacements.sort((a, b) => a.start - b.start);
+          
+          if (replacements.length > 0) {
+            const fragment = document.createDocumentFragment();
+            let lastIndex = 0;
+            
+            replacements.forEach(replacement => {
+              // 添加替换位置之前的文本
+              if (replacement.start > lastIndex) {
+                fragment.appendChild(document.createTextNode(originalText.substring(lastIndex, replacement.start)));
+              }
+              
+              // 创建按钮
+              const button = document.createElement('button');
+              button.className = 'feature-select-btn';
+              button.dataset.featureId = replacement.feature.id;
+              button.dataset.featureType = replacement.feature.type;
+              button.dataset.selected = replacement.isSelected;
+              button.textContent = replacement.feature.id + (replacement.isSelected ? ' ✓' : ' +');
+              button.style.cssText = `
+                display: inline-block;
+                margin: 0 2px;
+                padding: 2px 6px;
+                background-color: ${replacement.isSelected ? '#4caf50' : '#2196f3'};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 11px;
+                font-weight: bold;
+                vertical-align: baseline;
+              `;
+              button.title = lang === 'zh' 
+                ? (replacement.isSelected ? '已选中，点击移除' : '点击添加到数据集')
+                : (replacement.isSelected ? 'Selected, click to remove' : 'Click to add to dataset');
+              
+              // 使用立即执行函数捕获正确的值，避免闭包问题
+              (() => {
+                const featureId = replacement.feature.id;
+                const featureType = replacement.feature.type;
+                
+                button.onclick = (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  // 从按钮的 dataset 获取当前状态（这是最准确的）
+                  const currentIsSelected = button.dataset.selected === 'true';
+                  
+                  const result = toggleFeatureSelection(featureId, featureType, currentIsSelected);
+                  if (result.action === 'added') {
+                    // 已添加，更新为选中状态
+                    button.textContent = featureId + ' ✓';
+                    button.style.backgroundColor = '#4caf50';
+                    button.dataset.selected = 'true';
+                    button.title = lang === 'zh' ? '已选中，点击移除' : 'Selected, click to remove';
+                  } else if (result.action === 'removed') {
+                    // 已删除，更新为未选中状态
+                    button.textContent = featureId + ' +';
+                    button.style.backgroundColor = '#2196f3';
+                    button.dataset.selected = 'false';
+                    button.title = lang === 'zh' ? '点击添加到数据集' : 'Click to add to dataset';
+                  }
+                };
+              })();
+              
+              fragment.appendChild(button);
+              lastIndex = replacement.end;
+            });
+            
+            // 添加最后剩余的文本
+            if (lastIndex < originalText.length) {
+              fragment.appendChild(document.createTextNode(originalText.substring(lastIndex)));
+            }
+            
+            // 替换原文本节点
+            if (textNode.parentNode) {
+              textNode.parentNode.replaceChild(fragment, textNode);
+            }
+          }
+        });
+        
+        container.dataset.processed = 'true';
+      });
+    };
+    
+    // 延迟处理，确保ReactMarkdown已经渲染完成
+    const timer = setTimeout(processFeatureIds, 200);
+    
+    return () => clearTimeout(timer);
+  }, [messages, selectedGBFeatures, selectedEAFeatures, selectedWALSFeatures, lang, toggleFeatureSelection]);
 
   // Check API status on mount and when API key changes
   useEffect(() => {
@@ -1090,7 +1378,7 @@ Use markdown formatting for better readability.`;
     }
   };
 
-  // 处理消息文本中的链接
+  // 处理消息文本中的链接和特征
   const processMessageText = (text) => {
     if (!text) return '';
     
@@ -1179,48 +1467,54 @@ Use markdown formatting for better readability.`;
                 {message.isUser ? (
                   <div>{message.text}</div>
                 ) : (
-                  <ReactMarkdown 
-                    components={{
-                      // 自定义代码块样式
-                      code: ({node, inline, className, children, ...props}) => {
-                        const match = /language-(\w+)/.exec(className || '');
-                        return !inline && match ? (
+                  <div 
+                    className="ai-message-content"
+                    data-message-id={message.id}
+                    data-processed="false"
+                  >
+                    <ReactMarkdown 
+                      components={{
+                        // 自定义代码块样式
+                        code: ({node, inline, className, children, ...props}) => {
+                          const match = /language-(\w+)/.exec(className || '');
+                          return !inline && match ? (
+                            <pre style={{
+                              background: '#f6f8fa',
+                              padding: '12px',
+                              borderRadius: '6px',
+                              overflow: 'auto',
+                              fontSize: '12px',
+                              border: '1px solid #e1e4e8'
+                            }}>
+                              <code className={className} {...props}>
+                                {children}
+                              </code>
+                            </pre>
+                          ) : (
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          );
+                        },
+                        // 自定义JSON代码块样式
+                        pre: ({children}) => (
                           <pre style={{
                             background: '#f6f8fa',
                             padding: '12px',
                             borderRadius: '6px',
                             overflow: 'auto',
                             fontSize: '12px',
-                            border: '1px solid #e1e4e8'
+                            border: '1px solid #e1e4e8',
+                            margin: '8px 0'
                           }}>
-                            <code className={className} {...props}>
-                              {children}
-                            </code>
-                          </pre>
-                        ) : (
-                          <code className={className} {...props}>
                             {children}
-                          </code>
-                        );
-                      },
-                      // 自定义JSON代码块样式
-                      pre: ({children}) => (
-                        <pre style={{
-                          background: '#f6f8fa',
-                          padding: '12px',
-                          borderRadius: '6px',
-                          overflow: 'auto',
-                          fontSize: '12px',
-                          border: '1px solid #e1e4e8',
-                          margin: '8px 0'
-                        }}>
-                          {children}
-                        </pre>
-                      )
-                    }}
-                  >
-                    {message.text}
-                  </ReactMarkdown>
+                          </pre>
+                        )
+                      }}
+                    >
+                      {message.text}
+                    </ReactMarkdown>
+                  </div>
                 )}
                 <div style={{ fontSize: '10px', color: message.isUser ? 'rgba(255,255,255,0.7)' : '#999', marginTop: '4px' }}>
                   {message.timestamp}

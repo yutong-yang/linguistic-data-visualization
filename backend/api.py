@@ -569,22 +569,34 @@ async def add_documents_batch(background_tasks: BackgroundTasks):
         global current_task_id, task_cancelled
         
         try:
-            # 只处理 repository 目录下的文档
+            # 只处理 repository 目录下的 Handbook1 和 Handbook2
             repository_dir = Path("../public/repository")
             
             if not repository_dir.exists():
                 logger.warning("repository 目录不存在")
                 return
             
-            # 统计文件总数
-            pdf_files = list(repository_dir.rglob("*.pdf"))
+            # 只处理 Handbook1 和 Handbook2 目录
+            handbook_dirs = ["Handbook1", "Handbook2"]
+            pdf_files = []
+            
+            for handbook_dir_name in handbook_dirs:
+                handbook_dir = repository_dir / handbook_dir_name
+                if handbook_dir.exists():
+                    # 只扫描这个目录下的 PDF 文件（不包括子目录，除非需要）
+                    handbook_pdfs = list(handbook_dir.rglob("*.pdf"))
+                    pdf_files.extend(handbook_pdfs)
+                    logger.info(f"找到 {handbook_dir_name} 目录: {len(handbook_pdfs)} 个PDF文件")
+                else:
+                    logger.warning(f"{handbook_dir_name} 目录不存在")
+            
             total_files = len(pdf_files)
             
             if total_files == 0:
-                logger.info("repository 目录中没有PDF文件")
+                logger.info("Handbook1 和 Handbook2 目录中没有PDF文件")
                 return
             
-            logger.info(f"开始批量处理 repository 目录，总计 {total_files} 个PDF文件")
+            logger.info(f"开始批量处理 Handbook1 和 Handbook2 目录，总计 {total_files} 个PDF文件")
             
             processed_files = 0
             errors = []
@@ -638,6 +650,13 @@ async def add_documents_batch(background_tasks: BackgroundTasks):
                                     doc_title = extracted_title
                                     logger.info(f"  - 文件名看起来不像标题，使用提取的标题: {doc_title}")
                         
+                        # 确定文件来自哪个 handbook 目录
+                        handbook_name = None
+                        if "Handbook1" in file_path_str:
+                            handbook_name = "Handbook1"
+                        elif "Handbook2" in file_path_str:
+                            handbook_name = "Handbook2"
+                        
                         documents = [{
                             "content": text,
                             "metadata": {
@@ -645,6 +664,7 @@ async def add_documents_batch(background_tasks: BackgroundTasks):
                                 "type": "pdf",
                                 "filename": pdf_file.name,
                                 "title": doc_title,  # 添加提取的标题
+                                "handbook": handbook_name,  # 标记来源目录
                                 "processed_time": str(Path().cwd())
                             }
                         }]
@@ -679,13 +699,18 @@ async def add_documents_batch(background_tasks: BackgroundTasks):
     current_task_id = str(uuid.uuid4())
     current_task = asyncio.create_task(process_documents())
     
-    # 立即返回，包含文件统计信息
+    # 立即返回，包含文件统计信息（只统计 Handbook1 和 Handbook2）
     repository_dir = Path("../public/repository")
+    total_files = 0
     if repository_dir.exists():
-        pdf_files = list(repository_dir.rglob("*.pdf"))
+        handbook_dirs = ["Handbook1", "Handbook2"]
+        pdf_files = []
+        for handbook_dir_name in handbook_dirs:
+            handbook_dir = repository_dir / handbook_dir_name
+            if handbook_dir.exists():
+                handbook_pdfs = list(handbook_dir.rglob("*.pdf"))
+                pdf_files.extend(handbook_pdfs)
         total_files = len(pdf_files)
-    else:
-        total_files = 0
     
     return {
         "status": "processing",

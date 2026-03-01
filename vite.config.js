@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  base: '/linguistic-data-visualization/',
   
   // 服务器配置
   server: {
@@ -33,7 +34,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          utils: ['react-router-dom']
         }
       }
     }

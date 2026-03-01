@@ -14,7 +14,7 @@ export async function loadGrambankParameters() {
   
   try {
     // 使用正确的public目录路径
-    const csvUrl = '/public/grambank-grambank-7ae000c/cldf/parameters.csv';
+    const csvUrl = 'grambank-grambank-7ae000c/cldf/parameters.csv';
     
     const response = await fetch(csvUrl);
     
@@ -53,7 +53,7 @@ export async function loadDplaceVariables() {
   
   try {
     // 使用正确的public目录路径
-    const csvUrl = '/public/dplace-cldf/cldf/variables.csv';
+    const csvUrl = 'dplace-cldf/cldf/variables.csv';
     
     const response = await fetch(csvUrl);
     
@@ -90,7 +90,7 @@ export async function loadLanguages() {
   
   try {
     // 使用正确的public目录路径
-    const response = await fetch(`public/grambank-grambank-7ae000c/cldf/languages.csv`);
+    const response = await fetch(`grambank-grambank-7ae000c/cldf/languages.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     

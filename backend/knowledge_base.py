@@ -3,7 +3,7 @@ import json
 import pandas as pd
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 import PyPDF2
 import logging
@@ -41,6 +41,8 @@ class LightweightDocumentStore:
         self.embedding_model = None
         self.use_ollama = False
         self.use_sentence_transformers = False
+        self.vectorizer = None  # TF-IDF 向量化器，仅在无其他 embedding 时使用
+        self.is_fitted = False
         
         # 优先尝试使用Ollama（本地模型，隐私友好，Mac友好）
         # 直接使用ollama Python包，避免langchain-ollama的版本冲突
@@ -139,6 +141,18 @@ class LightweightDocumentStore:
                     except:
                         vectors_len = None
                 
+                # 维度检查：确保已保存向量的维度与当前模型一致
+                if self.use_sentence_transformers and self.embedding_model and self.vectors is not None:
+                    if hasattr(self.vectors, 'shape') and len(self.vectors.shape) > 1:
+                        expected_dim = self.embedding_model.get_sentence_embedding_dimension()
+                        actual_dim = self.vectors.shape[1]
+                        if actual_dim != expected_dim:
+                            logger.warning(
+                                f"向量维度不匹配: 已保存={actual_dim}维, "
+                                f"当前模型={expected_dim}维，需要重新生成 embedding"
+                            )
+                            vectors_len = None  # 强制触发重新生成
+
                 if vectors_len is not None and vectors_len == len(self.documents):
                     model_name = "Ollama" if self.use_ollama else "sentence-transformers"
                     logger.info(f"加载已保存的{model_name} embedding向量，文档数量: {len(self.documents)}")

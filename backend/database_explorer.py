@@ -16,23 +16,48 @@ _cached_wals_parameters: Optional[List[Dict[str, Any]]] = None
 _cached_languages: Optional[List[Dict[str, Any]]] = None
 
 # 获取项目根目录
-PROJECT_ROOT = Path(__file__).parent.parent
+SCRIPT_DIR = Path(__file__).parent          # HF Space 里是 /app
+PROJECT_ROOT = SCRIPT_DIR.parent
 PUBLIC_DIR = PROJECT_ROOT / "public"
 
+# GitHub Pages 上的前端静态资源 URL（CSV 文件由前端 public/ 目录提供）
+GITHUB_PAGES_BASE_URL = "https://yutong-yang.github.io/linguistic-data-visualization"
+
 def get_csv_path(relative_path: str) -> Path:
-    """获取 CSV 文件的完整路径"""
-    # 尝试多个可能的路径
+    """获取 CSV 文件的完整路径，本地找不到时自动从 GitHub Pages 下载并缓存"""
+    # 尝试多个可能的本地路径
     paths = [
+        SCRIPT_DIR / "data" / relative_path,   # backend/data/（可选本地副本）
         PUBLIC_DIR / relative_path,
         PROJECT_ROOT / relative_path,
-        Path(relative_path)  # 绝对路径
+        Path(relative_path)
     ]
-    
+
     for path in paths:
         if path.exists():
             return path
-    
-    raise FileNotFoundError(f"找不到文件: {relative_path}，尝试过的路径: {[str(p) for p in paths]}")
+
+    # 本地找不到，尝试从 GitHub Pages 下载并缓存
+    cache_path = SCRIPT_DIR / "data_cache" / relative_path
+    if cache_path.exists():
+        return cache_path
+
+    url = f"{GITHUB_PAGES_BASE_URL}/{relative_path}"
+    try:
+        import httpx
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"本地 CSV 不存在，从 GitHub Pages 下载: {url}")
+        response = httpx.get(url, timeout=30, follow_redirects=True)
+        response.raise_for_status()
+        cache_path.write_bytes(response.content)
+        logger.info(f"下载成功，已缓存到: {cache_path}")
+        return cache_path
+    except Exception as e:
+        raise FileNotFoundError(
+            f"找不到文件: {relative_path}，"
+            f"尝试过的路径: {[str(p) for p in paths]}，"
+            f"从 GitHub Pages 下载也失败: {e}"
+        )
 
 def load_grambank_parameters() -> List[Dict[str, Any]]:
     """加载 Grambank 参数数据库"""

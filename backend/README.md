@@ -1,3 +1,12 @@
+---
+title: GlobalMosaic Backend
+emoji: 🌍
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 ## 快速开始
 
 ### 为什么使用 UV？

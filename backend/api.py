@@ -571,24 +571,71 @@ async def add_documents_batch(background_tasks: BackgroundTasks):
         try:
             # 只处理 repository 目录下的 Handbook1 和 Handbook2
             repository_dir = Path("../public/repository")
-            
-            if not repository_dir.exists():
-                logger.warning("repository 目录不存在")
-                return
-            
-            # 只处理 Handbook1 和 Handbook2 目录
             handbook_dirs = ["Handbook1", "Handbook2"]
             pdf_files = []
-            
-            for handbook_dir_name in handbook_dirs:
-                handbook_dir = repository_dir / handbook_dir_name
-                if handbook_dir.exists():
-                    # 只扫描这个目录下的 PDF 文件（不包括子目录，除非需要）
-                    handbook_pdfs = list(handbook_dir.rglob("*.pdf"))
-                    pdf_files.extend(handbook_pdfs)
-                    logger.info(f"找到 {handbook_dir_name} 目录: {len(handbook_pdfs)} 个PDF文件")
-                else:
-                    logger.warning(f"{handbook_dir_name} 目录不存在")
+
+            if repository_dir.exists():
+                # 本地路径存在，直接使用
+                for handbook_dir_name in handbook_dirs:
+                    handbook_dir = repository_dir / handbook_dir_name
+                    if handbook_dir.exists():
+                        handbook_pdfs = list(handbook_dir.rglob("*.pdf"))
+                        pdf_files.extend(handbook_pdfs)
+                        logger.info(f"找到 {handbook_dir_name} 目录: {len(handbook_pdfs)} 个PDF文件")
+                    else:
+                        logger.warning(f"{handbook_dir_name} 目录不存在")
+            else:
+                # 本地路径不存在（HF Space），从 GitHub 下载 PDF
+                logger.info("本地 repository 目录不存在，从 GitHub 下载 PDF...")
+                GITHUB_API_BASE = "https://api.github.com/repos/yutong-yang/linguistic-data-visualization/contents/public/repository"
+                temp_dir = Path("/tmp/handbook_cache")
+                temp_dir.mkdir(exist_ok=True)
+
+                for handbook_name in handbook_dirs:
+                    if task_cancelled:
+                        break
+                    try:
+                        api_url = f"{GITHUB_API_BASE}/{handbook_name}"
+                        api_resp = await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda url=api_url: httpx.get(url, timeout=30, headers={"Accept": "application/vnd.github+json"})
+                        )
+                        if api_resp.status_code != 200:
+                            logger.error(f"GitHub API 请求失败 {handbook_name}: {api_resp.status_code}")
+                            continue
+
+                        file_entries = [f for f in api_resp.json() if f.get("name", "").lower().endswith(".pdf") and f.get("type") == "file"]
+                        logger.info(f"GitHub {handbook_name}: 找到 {len(file_entries)} 个PDF")
+
+                        handbook_temp_dir = temp_dir / handbook_name
+                        handbook_temp_dir.mkdir(exist_ok=True)
+
+                        for file_info in file_entries:
+                            if task_cancelled:
+                                break
+                            filename = file_info["name"]
+                            download_url = file_info["download_url"]
+                            local_path = handbook_temp_dir / filename
+
+                            if not local_path.exists():
+                                logger.info(f"下载: {filename}")
+                                pdf_resp = await asyncio.get_event_loop().run_in_executor(
+                                    None,
+                                    lambda url=download_url: httpx.get(url, timeout=120, follow_redirects=True)
+                                )
+                                if pdf_resp.status_code == 200:
+                                    local_path.write_bytes(pdf_resp.content)
+                                    logger.info(f"下载完成: {filename}")
+                                else:
+                                    logger.error(f"下载失败: {filename}, 状态码: {pdf_resp.status_code}")
+                                    continue
+                            else:
+                                logger.info(f"已缓存，跳过下载: {filename}")
+
+                            pdf_files.append(local_path)
+
+                    except Exception as e:
+                        logger.error(f"从 GitHub 获取 {handbook_name} 失败: {e}")
             
             total_files = len(pdf_files)
             
@@ -711,6 +758,8 @@ async def add_documents_batch(background_tasks: BackgroundTasks):
                 handbook_pdfs = list(handbook_dir.rglob("*.pdf"))
                 pdf_files.extend(handbook_pdfs)
         total_files = len(pdf_files)
+    else:
+        total_files = -1  # 表示将从 GitHub 下载，数量待定
     
     return {
         "status": "processing",

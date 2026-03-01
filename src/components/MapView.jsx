@@ -46,7 +46,7 @@ const MapView = () => {
         const [phylogeneticResult, familyMapping] = await Promise.all([
           (async () => {
             try {
-              const response = await fetch('/EDGE_tree.nex');
+              const response = await fetch(`EDGE_tree.nex`);
               const nexusContent = await response.text();
               
               // 解析NEXUS文件
@@ -78,7 +78,7 @@ const MapView = () => {
         
         // 加载D-PLACE codes
         try {
-          const response = await fetch('/dplace-cldf/cldf/codes.csv');
+          const response = await fetch(`dplace-cldf/cldf/codes.csv`);
           const text = await response.text();
           const data = d3.csvParse(text);
           const codes = {};
@@ -99,7 +99,7 @@ const MapView = () => {
         
         // 加载WALS codes
         try {
-          const response = await fetch('/cldf-datasets-wals-014143f/cldf/codes.csv');
+          const response = await fetch(`cldf-datasets-wals-014143f/cldf/codes.csv`);
           const text = await response.text();
           const data = d3.csvParse(text);
           const codes = {};

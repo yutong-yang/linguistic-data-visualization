@@ -13,7 +13,7 @@ const LanguageFilter = () => {
   useEffect(() => {
     const loadDorecoLanguages = async () => {
       try {
-        const response = await fetch('/doreco.csv');
+        const response = await fetch(`doreco.csv`);
         const csvText = await response.text();
         const lines = csvText.split('\n').slice(1); // 跳过标题行
         const languages = lines

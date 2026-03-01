@@ -90,7 +90,7 @@ export async function loadLanguages() {
   
   try {
     // 使用正确的public目录路径
-    const response = await fetch('/public/grambank-grambank-7ae000c/cldf/languages.csv');
+    const response = await fetch(`public/grambank-grambank-7ae000c/cldf/languages.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     

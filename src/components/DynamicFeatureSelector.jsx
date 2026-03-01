@@ -57,7 +57,7 @@ const DynamicFeatureSelector = () => {
   const loadAvailableFeatures = async () => {
     try {
       // 加载Grambank参数
-      const gbResponse = await fetch('/grambank-grambank-7ae000c/cldf/parameters.csv');
+      const gbResponse = await fetch(`grambank-grambank-7ae000c/cldf/parameters.csv`);
       const gbText = await gbResponse.text();
       const gbData = d3.csvParse(gbText);
       
@@ -71,7 +71,7 @@ const DynamicFeatureSelector = () => {
         .sort((a, b) => a.id.localeCompare(b.id));
 
       // 加载D-PLACE变量
-      const eaResponse = await fetch('/dplace-cldf/cldf/variables.csv');
+      const eaResponse = await fetch(`dplace-cldf/cldf/variables.csv`);
       const eaText = await eaResponse.text();
       const eaData = d3.csvParse(eaText);
       
@@ -85,7 +85,7 @@ const DynamicFeatureSelector = () => {
         .sort((a, b) => a.id.localeCompare(b.id));
 
       // 加载WALS参数
-      const walsResponse = await fetch('/cldf-datasets-wals-014143f/cldf/parameters.csv');
+      const walsResponse = await fetch(`cldf-datasets-wals-014143f/cldf/parameters.csv`);
       const walsText = await walsResponse.text();
       const walsData = d3.csvParse(walsText);
       

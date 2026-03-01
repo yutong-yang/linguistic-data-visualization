@@ -128,7 +128,7 @@ const CategoricalFeatureFilter = () => {
     const loadCategoricalData = async () => {
       try {
         // 加载codes.csv
-        const codesResponse = await fetch('/dplace-cldf/cldf/codes.csv');
+        const codesResponse = await fetch(`dplace-cldf/cldf/codes.csv`);
         const codesText = await codesResponse.text();
         const codesData = d3.csvParse(codesText);
         

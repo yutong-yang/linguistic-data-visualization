@@ -328,9 +328,9 @@ export async function loadAndParseTree(treeFileName) {
     // 构建文件路径 - EDGE_tree.nex在根目录，其他文件在dplace-cldf子目录
     let treePath;
     if (treeFileName === 'EDGE_tree.nex') {
-      treePath = `/${treeFileName}`;
+      treePath = `${treeFileName}`;
     } else {
-      treePath = `/dplace-cldf/cldf/trees/${treeFileName}`;
+      treePath = `dplace-cldf/cldf/trees/${treeFileName}`;
     }
     
     // 加载 tree 文件

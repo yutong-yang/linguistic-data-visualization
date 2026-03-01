@@ -18,7 +18,7 @@ async function loadGrambankLanguages() {
   if (cachedLanguages) return cachedLanguages;
   
   try {
-    const response = await fetch('/grambank-grambank-7ae000c/cldf/languages.csv');
+    const response = await fetch(`grambank-grambank-7ae000c/cldf/languages.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     
@@ -45,7 +45,7 @@ async function loadDplaceSocieties() {
   if (cachedSocieties) return cachedSocieties;
   
   try {
-    const response = await fetch('/dplace-cldf/cldf/societies.csv');
+    const response = await fetch(`dplace-cldf/cldf/societies.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     
@@ -72,7 +72,7 @@ async function loadGrambankValues() {
   if (cachedGbValues) return cachedGbValues;
   
   try {
-    const response = await fetch('/grambank-grambank-7ae000c/cldf/values.csv');
+    const response = await fetch(`grambank-grambank-7ae000c/cldf/values.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     
@@ -101,7 +101,7 @@ async function loadDplaceValues() {
   
   try {
     // 加载data.csv
-    const dataResponse = await fetch('/dplace-cldf/cldf/data.csv');
+    const dataResponse = await fetch(`dplace-cldf/cldf/data.csv`);
     const dataText = await dataResponse.text();
     const data = d3.csvParse(dataText);
     
@@ -146,7 +146,7 @@ async function loadGrambankParameters() {
   if (cachedGbParameters) return cachedGbParameters;
   
   try {
-    const response = await fetch('/grambank-grambank-7ae000c/cldf/parameters.csv');
+    const response = await fetch(`grambank-grambank-7ae000c/cldf/parameters.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     
@@ -169,7 +169,7 @@ async function loadEaVariables() {
   if (cachedEaVariables) return cachedEaVariables;
   
   try {
-    const response = await fetch('/dplace-cldf/cldf/variables.csv');
+    const response = await fetch(`dplace-cldf/cldf/variables.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     
@@ -195,7 +195,7 @@ async function loadWalsLanguages() {
   if (cachedWalsLanguages) return cachedWalsLanguages;
   
   try {
-    const response = await fetch('/cldf-datasets-wals-014143f/cldf/languages.csv');
+    const response = await fetch(`cldf-datasets-wals-014143f/cldf/languages.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     
@@ -222,7 +222,7 @@ async function loadWalsValues() {
   if (cachedWalsValues) return cachedWalsValues;
   
   try {
-    const response = await fetch('/cldf-datasets-wals-014143f/cldf/values.csv');
+    const response = await fetch(`cldf-datasets-wals-014143f/cldf/values.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     
@@ -251,7 +251,7 @@ async function loadWalsParameters() {
   if (cachedWalsParameters) return cachedWalsParameters;
   
   try {
-    const response = await fetch('/cldf-datasets-wals-014143f/cldf/parameters.csv');
+    const response = await fetch(`cldf-datasets-wals-014143f/cldf/parameters.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     
@@ -281,7 +281,7 @@ async function loadWalsCodes() {
   if (cachedWalsCodes) return cachedWalsCodes;
   
   try {
-    const response = await fetch('/cldf-datasets-wals-014143f/cldf/codes.csv');
+    const response = await fetch(`cldf-datasets-wals-014143f/cldf/codes.csv`);
     const text = await response.text();
     const data = d3.csvParse(text);
     

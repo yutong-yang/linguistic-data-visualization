@@ -120,7 +120,7 @@ export const DataProvider = ({ children }) => {
   const loadStaticData = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/data_gb_dplace_edge.csv');
+      const response = await fetch(`data_gb_dplace_edge.csv`);
       const csvText = await response.text();
       const data = d3.csvParse(csvText);
       
@@ -128,7 +128,7 @@ export const DataProvider = ({ children }) => {
       let languageNames = {};
       try {
         // 首先从languages.csv加载
-        const langResponse = await fetch('/grambank-grambank-7ae000c/cldf/languages.csv');
+        const langResponse = await fetch(`grambank-grambank-7ae000c/cldf/languages.csv`);
         const langText = await langResponse.text();
         const langData = d3.csvParse(langText);
         
@@ -139,7 +139,7 @@ export const DataProvider = ({ children }) => {
         });
         
         // 然后从societies.csv加载（补充缺失的语言）
-        const socResponse = await fetch('/dplace-cldf/cldf/societies.csv');
+        const socResponse = await fetch(`dplace-cldf/cldf/societies.csv`);
         const socText = await socResponse.text();
         const socData = d3.csvParse(socText);
         
@@ -215,7 +215,7 @@ export const DataProvider = ({ children }) => {
         const desc = {};
         try {
           // GB
-          const gbResponse = await fetch('/grambank-grambank-7ae000c/cldf/parameters.csv');
+          const gbResponse = await fetch(`grambank-grambank-7ae000c/cldf/parameters.csv`);
           const gbText = await gbResponse.text();
           const gbData = d3.csvParse(gbText);
           gbData.forEach(row => {
@@ -227,7 +227,7 @@ export const DataProvider = ({ children }) => {
             }
           });
           // EA
-          const eaResponse = await fetch('/dplace-cldf/cldf/variables.csv');
+          const eaResponse = await fetch(`dplace-cldf/cldf/variables.csv`);
           const eaText = await eaResponse.text();
           const eaData = d3.csvParse(eaText);
           eaData.forEach(row => {
@@ -245,7 +245,7 @@ export const DataProvider = ({ children }) => {
           });
           
           // WALS
-          const walsResponse = await fetch('/cldf-datasets-wals-014143f/cldf/parameters.csv');
+          const walsResponse = await fetch(`cldf-datasets-wals-014143f/cldf/parameters.csv`);
           const walsText = await walsResponse.text();
           const walsData = d3.csvParse(walsText);
           walsData.forEach(row => {

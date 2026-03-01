@@ -44,7 +44,7 @@ const FeatureWorkbench = () => {
   const loadAvailableFeatures = async () => {
     try {
       // Load Grambank parameters
-      const gbResponse = await fetch('/grambank-grambank-7ae000c/cldf/parameters.csv');
+      const gbResponse = await fetch(`grambank-grambank-7ae000c/cldf/parameters.csv`);
       const gbText = await gbResponse.text();
       const gbData = d3.csvParse(gbText);
       
@@ -58,7 +58,7 @@ const FeatureWorkbench = () => {
         .sort((a, b) => a.id.localeCompare(b.id));
 
       // Load D-PLACE variables
-      const eaResponse = await fetch('/dplace-cldf/cldf/variables.csv');
+      const eaResponse = await fetch(`dplace-cldf/cldf/variables.csv`);
       const eaText = await eaResponse.text();
       const eaData = d3.csvParse(eaText);
       
@@ -72,7 +72,7 @@ const FeatureWorkbench = () => {
         .sort((a, b) => a.id.localeCompare(b.id));
 
       // Load WALS parameters
-      const walsResponse = await fetch('/cldf-datasets-wals-014143f/cldf/parameters.csv');
+      const walsResponse = await fetch(`cldf-datasets-wals-014143f/cldf/parameters.csv`);
       const walsText = await walsResponse.text();
       const walsData = d3.csvParse(walsText);
       

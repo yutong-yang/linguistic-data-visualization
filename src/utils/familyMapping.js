@@ -3,7 +3,7 @@
 // 从WALS数据集加载语系映射
 export const loadFamilyMapping = async () => {
   try {
-    const response = await fetch('/cldf-datasets-wals-014143f/cldf/languages.csv');
+    const response = await fetch(`cldf-datasets-wals-014143f/cldf/languages.csv`);
     const csvText = await response.text();
     
     // 解析CSV
@@ -46,7 +46,7 @@ export const loadFamilyMapping = async () => {
 // 从Grambank数据集加载语系映射
 export const loadGrambankFamilyMapping = async () => {
   try {
-    const response = await fetch('/grambank-grambank-7ae000c/cldf/languages.csv');
+    const response = await fetch(`grambank-grambank-7ae000c/cldf/languages.csv`);
     const csvText = await response.text();
     
     // 解析CSV

@@ -2,9 +2,9 @@
 export const API_CONFIG = {
   // 从环境变量获取API基础URL，如果没有设置则使用默认值
   // 开发环境下支持代理，生产环境使用完整URL
-  baseURL: import.meta.env.DEV 
-    ? (import.meta.env.VITE_API_BASE_URL || '/api') 
-    : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'),
+  baseURL: import.meta.env.DEV
+    ? (import.meta.env.VITE_API_BASE_URL || '/api')
+    : (import.meta.env.VITE_API_BASE_URL || 'https://yutong-yang-globalmosaic-backend.hf.space'),
   
   // API超时时间（毫秒）
   timeout: 30000,
